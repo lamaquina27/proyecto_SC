@@ -25,6 +25,13 @@ python3 examples/analizar_logs.py logs
 sudo ./setup_adhoc.sh 1                       # solo en las Raspberry Pi
 ```
 
+Para el laboratorio se usa una sola USB con Ubuntu 24.04 arrancado con
+`toram` (pasos en `PREPARAR_USB.md`). `preparar_usb.ps1 -Unidad E:` copia el
+proyecto y `paquetes/*.deb` a la USB, y en cada equipo
+`sudo bash /media/ubuntu/COMPLEXNET/complexnet/arrancar_nodo.sh N` copia todo
+a la RAM, suelta la USB, monta la malla y abre la mensajería. Los `.sh` se
+guardan con LF (`.gitattributes`); `paquetes/` y `logs/` no van a git.
+
 El segundo y tercer argumento de los demos (interfaz y difusión) son para
 probar sin malla. En los equipos reales se omiten y se usa `bat0`. El puerto
 TCP solo hace falta cuando varios nodos corren en el mismo equipo.
