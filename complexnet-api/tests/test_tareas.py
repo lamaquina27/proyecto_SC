@@ -116,6 +116,24 @@ def test_carga_y_confiabilidad_propias():
     assert r.confiabilidad() == pytest.approx(2 / 3, abs=0.001)
 
 
+def test_las_tareas_en_curso_se_publican():
+    r = GestorRecursos(max_tareas=2)
+    assert "tareas" not in r.medir()
+    r.tarea_iniciada("t1", "suma", "nodo-1")
+    r.tarea_iniciada("t2", "suma", "nodo-3")
+    r.tarea_corriendo("t1")
+    e = r.medir()
+    assert [t[:4] for t in e["tareas"]] == [
+        ["t1", "suma", "nodo-1", "corriendo"],
+        ["t2", "suma", "nodo-3", "cola"]]
+    assert e["en_cola"] == 1
+    r.tarea_terminada(True, "t1")
+    r.tarea_terminada(False, "t2")
+    e = r.medir()
+    assert "tareas" not in e
+    assert (e["hechas"], e["fallidas"]) == (1, 1)
+
+
 def test_recursos_registrados_se_publican():
     r = GestorRecursos()
     assert "recursos" not in r.medir()
@@ -289,3 +307,23 @@ def test_se_agotan_los_intentos(red):
     time.sleep(2.0)
     with pytest.raises(TareaFallida):
         a.enviar_tarea("lenta", None, timeout=0.5, intentos=1)
+
+
+def test_los_demas_ven_que_tareas_ejecuta_un_nodo(red):
+    a = red("nodo-A", 5986).iniciar()
+    b = red("nodo-B", 5987, leer_estado=None, max_tareas=1).iniciar()
+    b.registrar_operacion("lenta", lambda d: time.sleep(2.0) or d)
+    time.sleep(2.0)
+
+    futuros = [a.enviar_tarea_async("lenta", i, timeout=10.0)
+               for i in range(2)]
+    time.sleep(0.8)
+    tareas = a.consultar_recursos("nodo-B").get("tareas") or []
+    assert sorted(t[3] for t in tareas) == ["cola", "corriendo"]
+    assert all(t[1] == "lenta" and t[2] == "nodo-A" for t in tareas)
+
+    assert sorted(f.result(timeout=10) for f in futuros) == [0, 1]
+    time.sleep(0.5)
+    estado = a.consultar_recursos("nodo-B")
+    assert "tareas" not in estado
+    assert estado["hechas"] == 2

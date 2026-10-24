@@ -252,14 +252,18 @@ restablece sola, sin que nadie configure nada.
 | Caída de golpe | Cerrar la terminal: SOSPECHOSO a los 15 s, INACTIVO a los 30 |
 | Se recupera solo | Volver a prenderlo y verlo reintegrarse |
 | Recursos | `recursos`: el vector [C, M, B, R, A] de cada nodo |
-| Asignación de tareas | `suma 10 20`: responde 30 y dice qué nodo la ejecutó |
+| Asignación de tareas | `calc 10 + 20`: responde 30 y dice qué nodo la ejecutó |
+| Reparto y costo | `estres 15` con `applications/monitor.py` abierto: cada nodo recibe una parte y se ve su CPU bajar |
 | Reasignación | Ver abajo |
 
 ### La reasignación en vivo
 
 Es la prueba más fuerte, porque junta tareas, planificador, detección de
-fallos y recuperación. En la aplicación, la suma es instantánea, así que la
-caída tiene que ocurrir con la tarea en curso. Lo más fácil es correr la
+fallos y recuperación. La caída tiene que ocurrir con la tarea en curso, y
+`estres` da el tiempo: desde el nodo 1, `estres 60 2`, y con el monitor ver
+qué nodo ejecuta una parte. Cerrar de golpe esa terminal: a los 30 s el
+monitor lo marca caído, la recuperación reasigna su parte y el `estres`
+termina igual, diciendo quién hizo cada parte. También se puede correr la
 prueba automática, que hace exactamente eso, y mostrar su registro:
 
 ```bash

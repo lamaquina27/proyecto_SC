@@ -18,7 +18,8 @@ puede leer interfaces (no hay `fcntl`), así que solo sirve el modo `--local`.
 pip install -r requirements.txt
 python3 applications/mensajeria.py            # aplicacion 1 en la malla (bat0)
 python3 applications/mensajeria.py --local    # lo mismo sin malla, varias terminales
-python3 -m pytest tests -v                    # 72 pruebas, tardan ~6 min
+python3 applications/monitor.py [--local]     # recursos y tareas de cada nodo, en vivo
+python3 -m pytest tests -v                    # 113 pruebas, tardan ~7 min
 python3 examples/demo_descubrimiento.py nodo-01 lo 127.255.255.255 5001 [grupo1,grupo2]
 python3 examples/demo_comunicacion.py nodo-01 lo 127.255.255.255 5001
 python3 examples/analizar_logs.py logs
@@ -47,6 +48,7 @@ complexnet-api/
 │   ├── communication/     capa 2: mueve mensajes, no decide nada
 │   │   ├── message.py     envoltura, tipos del corte 1, reloj de Lamport, limite UDP
 │   │   ├── transporte.py  UDP en difusión y multicast, TCP enmarcado con reintentos
+│   │   ├── archivos.py    FILE_CHUNK y FILE_ACK: archivos en trozos con SHA-256
 │   │   └── malla.py       lee bat0: IP, difusión, MTU y calidad TQ
 │   ├── discovery/         capa 3: quién está y cómo está
 │   │   ├── vecino.py      una fila de la tabla de vecinos
@@ -63,11 +65,13 @@ complexnet-api/
 │       ├── gestor.py      TASK_REQUEST, TASK_ASSIGN, TASK_RESULT; cola de ejecución
 │       └── recuperacion.py  reasignación: caído, no entregada, tiempo agotado
 ├── applications/
-│   └── mensajeria.py      aplicacion 1, escrita solo con Nodo
-├── tests/                 comunicacion, descubrimiento, integracion (3 nodos), api, tareas
+│   ├── mensajeria.py      aplicacion 1, escrita solo con Nodo
+│   ├── operaciones.py     calcular (ast, sin eval) y estresar (proceso aparte)
+│   └── monitor.py         panel de monitoreo en terminal (observador, no recibe tareas)
+├── tests/                 comunicacion, descubrimiento, integracion (3 nodos), api, tareas, archivos, operaciones
 ├── examples/              demos y analizar_logs.py
 └── docs/
-    ├── diseno.md          el porqué de cada decisión (14-17 corte 1, 18-22 tareas)
+    ├── diseno.md          el porqué de cada decisión (14-17 corte 1, 18-22 tareas, 23 archivos, 24-25 monitoreo y operaciones)
     ├── entregables_corte2.md  qué falta de cada entregable y de quién es
     └── api/manual.md      manual técnico de cada operación
 ```
@@ -111,8 +115,8 @@ descubrimiento (decisiones 4 y 15).
 `Nodo` (`registrar_operacion` y `enviar_tarea_async`; ejemplo en
 `docs/api/manual.md` §9.4). No tocar sus archivos sin avisarle.
 
-**Aplicación 3** (sensores de movimiento) y **panel de monitoreo**: todavía
-no se empiezan.
+**Aplicación 3** (sensores de movimiento): todavía no se empieza. El panel
+de monitoreo existe en terminal (`applications/monitor.py`, manual §11).
 
 La frontera con la aplicación de regresión es la clase `Nodo`: no debe
 necesitar nada de las capas de abajo.

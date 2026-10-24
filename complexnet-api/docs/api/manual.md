@@ -30,6 +30,7 @@ with Nodo("nodo-01", servicios=["sensor"]) as nodo:     # unirse a la red
 | Ver quién está conectado | `consultar_estado_red(incluir_caidos=False)` |
 | Mandar una tarea | `enviar_tarea(operacion, datos)` (el `submit()` de la capa 4); `registrar_operacion(nombre, funcion)` para ofrecerla |
 | Mandar un mensaje | `enviar_mensaje(destino, datos)`, `difundir(datos)`, `enviar_a_grupo(grupo, datos)` |
+| Mandar un archivo | `enviar_archivo(destino, ruta)`; `cuando_llegue_archivo(f)` para enterarse de los que llegan (sección 10) |
 | Publicar un servicio | `publicar_servicio(nombre)` |
 | Reaccionar a eventos | `al_recibir(tipo, f)`, `cuando_entre(f)`, `cuando_sospeche(f)`, `cuando_salga(f)`, `cuando_reporten(f)`, `cuando_falle(f)` |
 
@@ -52,7 +53,7 @@ with Nodo("nodo-01", servicios=["sensor"]) as nodo:     # unirse a la red
 Nodo(nombre=None, interfaz="bat0", difusion=None, puerto_udp=5000,
      puerto_tcp=5001, servicios=None, leer_estado=None, carpeta_logs="logs",
      carpeta_id=None, node_id=None, t_hello=5.0, t_sospecha=15.0,
-     t_muerte=30.0, max_tareas=2, pesos=None)
+     t_muerte=30.0, max_tareas=2, pesos=None, carpeta_archivos="recibidos")
 ```
 
 | Parámetro | Descripción |
@@ -63,6 +64,7 @@ Nodo(nombre=None, interfaz="bat0", difusion=None, puerto_udp=5000,
 | `carpeta_id`, `node_id` | Ver "Identidad" más abajo. |
 | `max_tareas` | Cuántas tareas ajenas ejecuta a la vez; el resto espera en cola. |
 | `pesos` | Pesos de F(i,j), por ejemplo `{"cpu": 2.0, "carga": 1.5}`. Claves: `cpu`, `memoria`, `ancho_banda`, `confiabilidad`, `carga`. |
+| `carpeta_archivos` | Dónde quedan los archivos que le mandan a este nodo (sección 10). |
 
 ### Métodos
 
@@ -82,6 +84,8 @@ Nodo(nombre=None, interfaz="bat0", difusion=None, puerto_udp=5000,
 | `registrar_operacion(nombre, funcion)` | Este nodo sabe hacer `nombre`: lo publica como servicio y ejecuta `funcion(datos)` cuando se lo pidan. |
 | `enviar_tarea(operacion, datos=None, requisitos=None, timeout=30.0, intentos=3, prioridad=0)` | El resultado. Bloquea hasta tenerlo. Lanza `TareaFallida` si no se pudo. |
 | `enviar_tarea_async(...)` | Igual, pero devuelve un `Future` al instante. `futuro.result()` espera; `futuro.tarea` tiene `ejecutor`, `historial` e `intentos`. |
+| `enviar_archivo(destino, ruta, nombre=None, timeout=30.0, al_avanzar=None)` | Diccionario con `entregado`, `ruta` (dónde quedó en el destino), `error`, `tamano`, `trozos`, `sha256`, `segundos`. Bloquea hasta que el destino confirma. Lanza `LookupError` si no conoce el destino. Ver sección 10. |
+| `cuando_llegue_archivo(funcion)` | `funcion(info)` con `nombre`, `ruta`, `tamano`, `sha256`, `de`, `ip`, `transfer_id`. |
 
 **Para la aplicación de regresión:** ver el ejemplo en la sección 9.4.
 
@@ -184,6 +188,7 @@ Todos están definidos como constantes en `src.communication`.
 | `NODE_STATUS` | Detección de fallos | Quien ve cambiar el estado de un vecino | `node_id`, `nombre`, `status`, `anterior` |
 | `GOODBYE` | Descubrimiento | Un nodo que se apaga en orden | `nombre` |
 | `TASK_REQUEST`, `TASK_ASSIGN`, `TASK_RESULT` | Tareas | Definidos, los usa la parte de tareas | — |
+| `FILE_CHUNK`, `FILE_ACK` | Archivos | Quien envía un archivo / quien lo recibe | Ver sección 10 |
 | `ANUNCIO`, `PING`, `PONG`, `APP_MSG` | Demos y aplicaciones | — | libre |
 
 Las aplicaciones pueden inventar tipos nuevos sin tocar el protocolo.
@@ -539,6 +544,9 @@ python3 applications/mensajeria.py --grupos rescate    # entra a un grupo al arr
 | `grupo <grupo> <texto>` | `enviar_a_grupo()` (multicast) |
 | `unir` / `dejar <grupo>` | `unirse_a_grupo()` / `salir_de_grupo()` |
 | `ping <nodo>` | `enviar_mensaje(..., tipo=PING)` y respuesta `PONG` |
+| `archivo <nodo> <ruta>` | `enviar_archivo()` (sección 10); quien lo recibe avisa con `cuando_llegue_archivo()` |
+| `calc <expresion>` (o `operacion`) | `enviar_tarea_async("calcular", expresion)`: la ejecuta el nodo con mayor F |
+| `estres <seg> [partes] [mb]` | `enviar_tarea_async("estresar", ...)` una vez por parte; el planificador las reparte |
 | `red` | `malla.resumen()` |
 | `stats` | `mensajes.metricas()` |
 
@@ -551,8 +559,28 @@ Comportamiento:
   puertos.
 - El nombre por defecto es el del equipo (`hostname`); con `--local` se le
   agrega el puerto (`equipo-5002`) para que no se repita.
-- `msg`, `ping` y `grupo` se envían en segundo plano: la consola no se
-  congela mientras se reintenta un envío.
+- `msg`, `ping`, `grupo` y `archivo` se envían en segundo plano: la consola
+  no se congela mientras se reintenta un envío. `archivo` muestra el avance
+  en 25, 50 y 75 % y avisa si llegó completo o por qué no.
+- Cada mensajería ofrece dos operaciones a la red, definidas en
+  `applications/operaciones.py`:
+  - **`calcular`**: una expresión con números, `+ - * / // % **` (o `^`),
+    paréntesis, `pi`, `e` y funciones como `sqrt`, `sin`, `log`,
+    `factorial`, `max`. Se interpreta con `ast`, nunca con `eval`: un nodo
+    no puede hacer que otro ejecute código. Las potencias y factoriales
+    enormes se rechazan. Ejemplos: `calc (10 + 20) * 2^3`,
+    `calc sqrt(2) * pi`. Un error como `calc 1/0` vuelve como error de la
+    tarea y no se reasigna (decisión 21).
+  - **`estresar`**: busca primos por división durante `seg` segundos y, si
+    se pide, reserva `mb` de memoria mientras tanto. Corre en un proceso
+    aparte, así que cada parte ocupa un núcleo entero del equipo que la
+    ejecuta. `estres 15 4 200` manda 4 partes de 15 s y 200 MB; sin
+    `partes`, manda una por cada nodo que la ofrece. Al final dice cuántas
+    partes hizo cada nodo. Para verlo, abra el monitor (sección 11).
+- El nodo que pide no ejecuta sus propias partes mientras haya otros que
+  sepan hacerlas (decisión 20), así que el costo se ve en los demás.
+- Los archivos recibidos quedan en `./recibidos` (`--archivos CARPETA` para
+  cambiarla). La ruta puede ir entre comillas si tiene espacios.
 - `salir` o Ctrl+C mandan `GOODBYE` y escriben las métricas en el registro.
 
 ## 8. Pruebas
@@ -575,7 +603,9 @@ fallo.
 | `test_descubrimiento.py` | Descubrimiento, servicios, umbrales, reingreso, latido gigante, grupos, `enviar_a_grupo` |
 | `test_integracion.py` | Tres nodos completos con registro: se cae el del medio, los otros dos lo detectan (y se lo reportan por NODE_STATUS) y siguen hablando, vuelve y se reintegra |
 | `test_api.py` | La clase `Nodo`: identidad persistente, consultas, envíos, servicios y el vector de estado |
-| `test_tareas.py` | F(i,j), recursos, la prueba de concepto `suma 10 + 20 = 30`, elección por aptitud, TASK_REQUEST, reparto en paralelo y las tres formas de reasignar |
+| `test_tareas.py` | F(i,j), recursos, la prueba de concepto `suma 10 + 20 = 30`, elección por aptitud, TASK_REQUEST, reparto en paralelo, las tres formas de reasignar y las tareas en curso publicadas |
+| `test_archivos.py` | Envío de archivos: en trozos, vacíos, nombres repetidos o peligrosos, varios a la vez, destino caído, huella incorrecta, recepciones abandonadas |
+| `test_operaciones.py` | `calcular` (y lo que rechaza) y `estresar` (tiempo, memoria, que corra en otro proceso) |
 
 **Limitación de la prueba de integración:** en loopback los tres nodos se
 oyen directamente, así que "el del medio" lo es por su papel (el único con
@@ -602,7 +632,9 @@ El porqué de cada regla está en `diseno.md`, decisiones 18 a 22.
 
 ```json
 {"cpu": 0.82, "memoria": 0.61, "ancho_banda": 0.94, "confiabilidad": 0.75,
- "disponibilidad": 1.0, "carga": 0.5, "almacenamiento": 0.40, "capacidad": 2}
+ "disponibilidad": 1.0, "carga": 0.5, "almacenamiento": 0.40, "capacidad": 2,
+ "hechas": 12, "fallidas": 1,
+ "tareas": [["3f9a12bc", "estresar", "nodo-1", "corriendo", 3]], "en_cola": 0}
 ```
 
 | Clave | Variable del modelo | Significado |
@@ -615,6 +647,9 @@ El porqué de cada regla está en `diseno.md`, decisiones 18 a 22.
 | `carga` | Li | Tareas en curso / capacidad |
 | `almacenamiento` | — | Disco libre (RF04) |
 | `capacidad` | — | `max_tareas` |
+| `hechas`, `fallidas` | — | Tareas ajenas o propias que este nodo terminó bien o con error |
+| `tareas` | — | Solo si hay alguna: las que ejecuta o tiene en cola, máximo 6, como `[tarea_id, operacion, solicitante, "corriendo" o "cola", segundos]` |
+| `en_cola` | — | Solo si hay tareas: cuántas esperan turno |
 
 | Método | Descripción |
 |---|---|
@@ -622,6 +657,8 @@ El porqué de cada regla está en `diseno.md`, decisiones 18 a 22.
 | `actualizar_recurso(nombre, disponible=None, capacidad=None)` | Cambia su estado. |
 | `obtener_recursos()` | La lista de recursos registrados. |
 | `carga()`, `confiabilidad()` | Los valores propios. |
+| `tareas()` | Las tareas que ejecuta o tiene en cola, con `tarea_id`, `operacion`, `de`, `estado` y `segundos`. |
+| `historial()` | `{"hechas": n, "fallidas": n}` |
 
 ### 9.2 `scheduler.PlanificadorDistribuido` (`nodo.planificador`)
 
@@ -689,3 +726,103 @@ with Nodo("nodo-01") as nodo:
 Todos los nodos que corran la aplicación registran la operación, así que
 cualquiera puede ejecutar un pedazo. El planificador reparte los pedazos según
 F(i,j), y si un nodo se cae a la mitad, su pedazo se reasigna solo.
+
+## 10. Envío de archivos: `communication.ServicioArchivos` (`nodo.archivos`)
+
+El porqué está en `diseno.md`, decisión 23.
+
+```python
+with Nodo("nodo-01") as nodo:
+    nodo.cuando_llegue_archivo(
+        lambda info: print(f"llegó {info['nombre']} a {info['ruta']}"))
+
+    r = nodo.enviar_archivo("nodo-02", "mapa_zona_norte.png",
+                            al_avanzar=lambda i, n: print(f"{i}/{n}"))
+    if not r["entregado"]:
+        print("no llegó:", r["error"])
+```
+
+- El archivo se parte en trozos de 256 KB (`nodo.archivos.trozo`). Cada uno
+  viaja como un `FILE_CHUNK` por TCP, con los reintentos de siempre.
+- El destino escribe cada trozo en su posición dentro de
+  `<carpeta_archivos>/.parciales/`, así que no importa el orden de llegada.
+- Con el último trozo comprueba tamaño y SHA-256, mueve el archivo a
+  `<carpeta_archivos>/` y responde un `FILE_ACK`. Si ya existe uno con el
+  mismo nombre, el nuevo queda como `nombre (1).ext`.
+- `enviar_archivo` devuelve cuando llega el `FILE_ACK` o cuando pasan
+  `timeout` segundos sin él.
+- Del nombre solo se usa la parte final: `../../etc/passwd` queda como
+  `passwd` dentro de la carpeta.
+- Una recepción que pasa 120 s sin recibir trozos (`nodo.archivos.abandono`)
+  se borra la próxima vez que llegue cualquier trozo.
+
+| Método / atributo | Descripción |
+|---|---|
+| `enviar(ip, puerto, receiver, ruta, nombre=None, timeout=30.0, al_avanzar=None)` | Lo que usa `Nodo.enviar_archivo` |
+| `cuando_llegue(funcion)` | Lo que usa `Nodo.cuando_llegue_archivo` |
+| `en_curso()` | Las recepciones sin terminar: `transfer_id`, `nombre`, `de`, `recibidos`, `trozos` |
+| `trozo`, `abandono`, `carpeta` | Configuración, modificable |
+
+| Tipo | Va por | Payload |
+|---|---|---|
+| `FILE_CHUNK` | TCP, al destino | `transfer_id`, `nombre`, `tamano`, `sha256`, `indice`, `total`, `posicion`, `puerto_tcp`, `datos` (base64) |
+| `FILE_ACK` | TCP, a quien envió | `transfer_id`, `ok`, `error`, `ruta` |
+
+Eventos del registro: `archivo_envio` y `archivo_enviado` o `archivo_fallido`
+(en quien envía); `archivo_llegando` y `archivo_recibido`,
+`archivo_rechazado` o `archivo_abandonado` (en quien recibe).
+
+## 11. Monitor en vivo: `applications/monitor.py`
+
+El porqué está en `diseno.md`, decisión 24. Se abre en una terminal aparte y
+redibuja cada segundo:
+
+```bash
+python3 applications/monitor.py            # en la Pi, junto a la mensajería
+python3 applications/monitor.py --local    # sin malla, junto a mensajerías --local
+```
+
+```
+ComplexNet - monitor de la red   desde monitor-pi3 (10.10.0.3)   11:21:02
+3 activos, 0 sospechosos, 0 caidos   |   tareas: 3 corriendo, 1 en cola
+
+nodo            estado        cpu   mem    bw     R     A  carga              F  hechas  fallas  visto
+nodo-1          ACTIVO        99%   51%  100%  0.50  1.00  [-] 0/1         3.00       0       0   1.0s
+nodo-2          ACTIVO        99%   51%  100%  0.50  1.00  [#] 1/1 +1      2.00       0       0   1.0s
+nodo-3          ACTIVO        99%   51%  100%  0.50  1.00  [##] 2/2        2.00       0       0   1.0s
+
+tareas en curso
+  nodo-2          lenta               de nodo-1          corriendo  1s
+  nodo-2          lenta               de nodo-1          cola       1s
+  nodo-3          lenta               de nodo-1          corriendo  1s
+  nodo-3          lenta               de nodo-1          corriendo  1s
+
+ultimos cambios
+  11:20:27  nodo-3 recibio lenta (de nodo-1)
+  11:20:27  nodo-2 recibio lenta (de nodo-1)
+  11:20:24  entro nodo-3 (10.10.0.3)
+```
+
+| Columna | De dónde sale |
+|---|---|
+| `cpu`, `mem` | % libre, del `RESOURCE_UPDATE` |
+| `bw`, `R`, `A` | Ancho de banda (TQ/255), confiabilidad y disponibilidad publicadas |
+| `carga` | Corriendo / capacidad, y `+n` si hay tareas en cola |
+| `F` | F(i,j) calculada por el monitor. Es orientativa: cada solicitante usa su propia reputación del ejecutor, así que su F puede ser distinta |
+| `hechas`, `fallas` | Tareas terminadas por ese nodo |
+| `visto` | Segundos desde su último mensaje |
+
+"Últimos cambios" sale de comparar cada `RESOURCE_UPDATE` con el anterior del
+mismo nodo: una tarea nueva es "recibió", una que desaparece es "terminó". Si
+el nodo sale de la red con tareas a medias, lo dice; la recuperación
+(decisión 21) es la que la reasigna.
+
+Opciones: `--nombre`, `--local`, `--interfaz`, `--puerto` (por defecto 5009,
+busca uno libre), `--cada` (segundos entre redibujos), `--logs CARPETA` y
+`--sin-color`.
+
+- El monitor es un nodo más (aparece en `lista` de la mensajería), pero no
+  ofrece ninguna operación, así que el planificador nunca le asigna tareas.
+  Los demás monitores no salen en la tabla.
+- Las columnas de recursos se actualizan con cada `RESOURCE_UPDATE`: cada 5 s
+  y, además, en el momento en que un nodo empieza o termina una tarea.

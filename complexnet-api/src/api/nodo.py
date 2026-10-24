@@ -1,6 +1,7 @@
 import socket
 
-from ..communication import APP_MSG, MensajeMuyGrande, ServicioMensajes
+from ..communication import (APP_MSG, MensajeMuyGrande, ServicioArchivos,
+                             ServicioMensajes)
 from ..discovery import ACTIVO, ServicioDescubrimiento, Vecino
 from ..monitoring import Registro
 from ..resources import GestorRecursos
@@ -14,7 +15,7 @@ class Nodo:
                  puerto_udp=5000, puerto_tcp=5001, servicios=None,
                  leer_estado=None, carpeta_logs="logs", carpeta_id=None,
                  node_id=None, t_hello=5.0, t_sospecha=15.0, t_muerte=30.0,
-                 max_tareas=2, pesos=None):
+                 max_tareas=2, pesos=None, carpeta_archivos="recibidos"):
         self.nombre = nombre or socket.gethostname()
         self.node_id = node_id or identidad(self.nombre, carpeta_id)
         self.interfaz = interfaz
@@ -34,6 +35,8 @@ class Nodo:
             t_hello=t_hello, t_sospecha=t_sospecha, t_muerte=t_muerte)
         self.tareas = GestorTareas(self.mensajes, self.descubrimiento,
                                    self.recursos, self.planificador)
+        self.archivos = ServicioArchivos(self.mensajes,
+                                         carpeta=carpeta_archivos)
         self.registro = None
         self.activo = False
 
@@ -54,6 +57,7 @@ class Nodo:
             self.registro.evento("inicio", ip=self.ip,
                                  interfaz=self.interfaz)
             self.tareas.registro = self.registro
+            self.archivos.registro = self.registro
         self.tareas.iniciar()
         self.descubrimiento.iniciar()
         self.activo = True
@@ -148,6 +152,16 @@ class Nodo:
 
     def enviar_tarea_async(self, operacion, datos=None, **opciones):
         return self.tareas.enviar_async(operacion, datos, **opciones)
+
+    def enviar_archivo(self, destino, ruta, nombre=None, **opciones):
+        v = self.buscar(destino)
+        if v is None:
+            raise LookupError(f"no conozco al nodo {destino}")
+        return self.archivos.enviar(v.ip, v.puerto_tcp, v.node_id, ruta,
+                                    nombre, **opciones)
+
+    def cuando_llegue_archivo(self, funcion):
+        self.archivos.cuando_llegue(funcion)
 
     def al_recibir(self, tipo, funcion):
         self.mensajes.al_recibir(tipo, funcion)

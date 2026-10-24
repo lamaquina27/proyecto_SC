@@ -1,6 +1,7 @@
 import os
 import shutil
 import threading
+import time
 
 from ..communication import malla
 
@@ -10,6 +11,9 @@ except ImportError:
     psutil = None
 
 NEUTRO = 0.5
+EN_COLA = "cola"
+CORRIENDO = "corriendo"
+TAREAS_PUBLICADAS = 6
 
 
 def _acotar(valor):
@@ -34,6 +38,7 @@ class GestorRecursos:
         self.carpeta_disco = carpeta_disco
         self._recursos = {}
         self._en_curso = 0
+        self._tareas = {}
         self._exitos = 0
         self._fallos = 0
         self._candado = threading.Lock()
@@ -57,17 +62,46 @@ class GestorRecursos:
         with self._candado:
             return [r.resumen() for r in self._recursos.values()]
 
-    def tarea_iniciada(self):
+    def tarea_iniciada(self, tarea_id=None, operacion=None, solicitante=None):
         with self._candado:
             self._en_curso += 1
+            if tarea_id is not None:
+                self._tareas[tarea_id] = {
+                    "tarea_id": tarea_id, "operacion": operacion,
+                    "de": solicitante, "estado": EN_COLA,
+                    "inicio": time.monotonic()}
 
-    def tarea_terminada(self, exito):
+    def tarea_corriendo(self, tarea_id):
+        with self._candado:
+            t = self._tareas.get(tarea_id)
+            if t is None:
+                return 0.0
+            espera = time.monotonic() - t["inicio"]
+            t["estado"] = CORRIENDO
+            t["inicio"] = time.monotonic()
+            return espera
+
+    def tarea_terminada(self, exito, tarea_id=None):
         with self._candado:
             self._en_curso = max(0, self._en_curso - 1)
+            self._tareas.pop(tarea_id, None)
             if exito:
                 self._exitos += 1
             else:
                 self._fallos += 1
+
+    def tareas(self):
+        ahora = time.monotonic()
+        with self._candado:
+            lista = [dict(t) for t in self._tareas.values()]
+        for t in lista:
+            t["segundos"] = round(ahora - t.pop("inicio"), 1)
+        lista.sort(key=lambda t: (t["estado"] != CORRIENDO, -t["segundos"]))
+        return lista
+
+    def historial(self):
+        with self._candado:
+            return {"hechas": self._exitos, "fallidas": self._fallos}
 
     def carga(self):
         with self._candado:
@@ -130,6 +164,14 @@ class GestorRecursos:
             "almacenamiento": self.almacenamiento_libre(),
             "capacidad": self.max_tareas,
         }
+        estado.update(self.historial())
+        tareas = self.tareas()
+        if tareas:
+            estado["tareas"] = [
+                [t["tarea_id"], t["operacion"], t["de"], t["estado"],
+                 int(t["segundos"])]
+                for t in tareas[:TAREAS_PUBLICADAS]]
+            estado["en_cola"] = sum(t["estado"] == EN_COLA for t in tareas)
         recursos = self.obtener_recursos()
         if recursos:
             estado["recursos"] = recursos

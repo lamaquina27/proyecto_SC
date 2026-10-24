@@ -8,7 +8,8 @@ Leyenda: ✅ hecho y probado · 🟡 parcial · ❌ no existe todavía
 **Reparto:** Juan hace todo el núcleo y la aplicación de mensajería. El
 compañero hace la aplicación de regresión lineal sobre `Nodo` (ejemplo de
 partida en `docs/api/manual.md` §9.4). La aplicación de sensores de
-movimiento y el panel de monitoreo quedan para después.
+movimiento queda para después. El panel de monitoreo está en terminal:
+`applications/monitor.py` (manual §11).
 
 ## 1. Los 13 entregables
 
@@ -73,7 +74,8 @@ pide `suma 10 + 20`, el nodo 2 la ejecuta y devuelve 30 por TASK_RESULT. La
 detección de la caída del nodo 2 está en `tests/test_integracion.py`, y la
 reasignación cuando se cae a mitad de una tarea en
 `tests/test_tareas.py::test_se_cae_el_ejecutor_y_se_reasigna`. En vivo:
-comando `suma 10 20` de `applications/mensajeria.py`.
+comando `calc 10 + 20` de `applications/mensajeria.py`, y para una tarea
+que dure, `estres 20` con el monitor abierto.
 
 ## 5. Qué falta
 

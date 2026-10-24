@@ -331,3 +331,75 @@ Como la operación da lo mismo en cualquier nodo, da igual cuál gane, y así
 nunca se espera de más. Esto supone que las operaciones no tienen efectos
 secundarios (calcular, no escribir en un archivo), lo cual se cumple para la
 suma y para la regresión.
+
+## Envío de archivos
+
+### 23. Archivos en trozos sobre el TCP enmarcado, con huella al final
+
+En una zona de desastre se necesita pasar fotos de daños, mapas y listas de
+personas entre nodos. Un archivo no cabe en un datagrama (decisión 2) y puede
+pasar del máximo de 4 MB de un mensaje TCP, así que se parte en trozos de
+256 KB que viajan como mensajes `FILE_CHUNK` normales.
+
+- **Reusar el TCP enmarcado** (decisión 3) en vez de abrir un canal binario
+  aparte: cada trozo hereda los reintentos y el aviso de fallo (decisión 8)
+  sin código nuevo. El costo es base64, un 33 % más de bytes, que se acepta
+  a cambio de no tener dos protocolos.
+- **Cada trozo lleva su posición.** Cada conexión TCP se atiende en su propio
+  hilo, así que dos trozos seguidos pueden procesarse en otro orden. El
+  receptor escribe en la posición y no le importa el orden.
+- **Va a disco, no a memoria.** Una Raspberry Pi no debe guardar un video
+  entero en RAM mientras llega.
+- **SHA-256 y confirmación (`FILE_ACK`).** Que cada trozo llegue no prueba
+  que el archivo esté completo y sano. El receptor compara la huella y
+  responde; quien envía solo da el archivo por entregado con esa respuesta.
+- **Sin reanudación.** Si el destino se cae a la mitad, se vuelve a enviar
+  desde cero, y lo que quedó a medias se borra a los 120 s. Reanudar pediría
+  que el receptor recuerde transferencias entre reinicios; se deja para
+  cuando haya archivos tan grandes que lo justifiquen.
+- **El nombre lo limpia el receptor.** Solo se toma la parte final, para que
+  un nombre como `../../algo` no escriba fuera de la carpeta, y nunca se pisa
+  un archivo que ya estaba.
+
+## Monitoreo
+
+### 24. Las tareas en curso viajan en el RESOURCE_UPDATE
+
+Para ver en vivo qué ejecuta cada nodo, el estado que ya se difunde
+(decisión 18) suma `hechas`, `fallidas`, `en_cola` y la lista `tareas`:
+`[tarea_id, operacion, solicitante, estado, segundos]`.
+
+- **Sin un tipo de mensaje nuevo.** El ejecutor ya publica su
+  `RESOURCE_UPDATE` al recibir y al terminar cada tarea (para que la carga Li
+  se vea enseguida), así que la lista llega justo cuando cambia, sin tráfico
+  extra. También se publica cuando una tarea que esperaba en cola empieza a
+  correr.
+- **Máximo 6 tareas en la lista.** El `RESOURCE_UPDATE` tiene que caber en un
+  datagrama (decisión 2). Seis entradas son unos 300 bytes. Con más, el total
+  sigue saliendo en la carga y en `en_cola`.
+- **El monitor es un observador.** `applications/monitor.py` entra a la red
+  como un nodo sin operaciones: el planificador solo escoge entre quienes
+  ofrecen la operación (decisión 20), así que nunca recibe tareas. No hace
+  falta un servidor central: cualquier equipo de la malla puede abrir un
+  monitor y ve lo mismo que los demás.
+- **"Recibió" y "terminó" se deducen** comparando cada lista con la anterior
+  del mismo nodo, por el `tarea_id`. Si se pierde un datagrama, el cambio se
+  ve con el siguiente `RESOURCE_UPDATE` (a lo sumo 5 s después).
+
+### 25. Las operaciones de la mensajería: `calcular` y `estresar`
+
+La suma del corte 1 se reemplazó por `calcular`, que acepta cualquier
+expresión matemática (la suma es un caso). Se interpreta con `ast` y una lista
+cerrada de operadores y funciones: con `eval`, cualquier nodo de la malla
+podría ejecutar código en otro.
+
+`estresar` existe para la demostración: hace visible en el monitor lo que le
+cuesta a cada nodo una tarea repartida. Corre en un proceso aparte porque en
+un mismo proceso de Python dos hilos no ocupan dos núcleos a la vez (GIL): con
+hilos, `max_tareas = 2` se vería como un solo núcleo ocupado. El número de
+procesos lo sigue limitando `max_tareas`, porque cada trabajador de la cola
+espera a su proceso.
+
+El tiempo máximo de cada parte es `seg · (partes + 1) + 15` s. Así una parte
+que espera en la cola de un nodo ocupado no se reasigna por tiempo
+(decisión 21) antes de empezar.

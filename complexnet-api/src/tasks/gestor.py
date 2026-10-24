@@ -12,6 +12,7 @@ from .tarea import ASIGNADA, Tarea, TareaFallida
 DESCONOCIDA = "desconocida"
 ERROR = "error"
 ESPERA_CANDIDATOS = 1.0
+ESPERA_PUBLICAR = 0.5
 
 
 class GestorTareas:
@@ -160,7 +161,8 @@ class GestorTareas:
                          intento=tarea.intentos, local=True)
             self._encolar(tarea.tarea_id, funcion, tarea.datos,
                           lambda r: self._resolver(tarea.tarea_id,
-                                                   self.node_id, r))
+                                                   self.node_id, r),
+                          tarea.operacion, self.descubrimiento.nombre)
             return
         requisitos = ", ".join(tarea.requisitos)
         self._terminar(tarea, error=f"ningun nodo activo ofrece {requisitos}")
@@ -275,10 +277,12 @@ class GestorTareas:
         self._evento("tarea_recibida", tarea=tarea_id,
                      operacion=p.get("operacion"),
                      solicitante=self._nombre(solicitante))
-        self._encolar(tarea_id, funcion, p.get("datos"), responder)
+        self._encolar(tarea_id, funcion, p.get("datos"), responder,
+                      p.get("operacion"), self._nombre(solicitante))
 
-    def _encolar(self, tarea_id, funcion, datos, al_terminar):
-        self.recursos.tarea_iniciada()
+    def _encolar(self, tarea_id, funcion, datos, al_terminar, operacion=None,
+                 solicitante=None):
+        self.recursos.tarea_iniciada(tarea_id, operacion, solicitante)
         self.descubrimiento.publicar_recursos()
         self._cola.put((tarea_id, funcion, datos, al_terminar))
 
@@ -289,6 +293,8 @@ class GestorTareas:
                     timeout=0.5)
             except queue.Empty:
                 continue
+            if self.recursos.tarea_corriendo(tarea_id) > ESPERA_PUBLICAR:
+                self.descubrimiento.publicar_recursos()
             inicio = time.monotonic()
             try:
                 resultado = funcion(datos)
@@ -298,7 +304,7 @@ class GestorTareas:
                 r = {"tarea_id": tarea_id, "ok": False, "codigo": ERROR,
                      "error": f"{type(e).__name__}: {e}"}
             r["duracion"] = round(time.monotonic() - inicio, 3)
-            self.recursos.tarea_terminada(r["ok"])
+            self.recursos.tarea_terminada(r["ok"], tarea_id)
             self.descubrimiento.publicar_recursos()
             try:
                 al_terminar(r)

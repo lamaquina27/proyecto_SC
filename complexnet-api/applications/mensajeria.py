@@ -22,6 +22,8 @@ Opciones:
     --puerto N           puerto TCP (en --local se busca uno libre solo)
     --grupos a,b         grupos a los que se une al arrancar
     --logs CARPETA       donde guardar el registro (por defecto logs)
+    --archivos CARPETA   donde quedan los archivos recibidos
+                         (por defecto recibidos)
 
 Comandos dentro del programa:
 
@@ -33,9 +35,16 @@ Comandos dentro del programa:
     unir <grupo>           entrar a un grupo
     dejar <grupo>          salir de un grupo
     ping <nodo>            tiempo de ida y vuelta
-    suma <a> <b> ...       la prueba de concepto del corte 1: la suma se
-                           manda como tarea y la ejecuta el nodo con mayor
-                           F(i,j); si ese nodo se cae, se reasigna
+    archivo <nodo> <ruta>  envia un archivo; el otro nodo lo guarda en su
+                           carpeta de recibidos y avisa al llegar
+    calc <expresion>       operacion matematica como tarea distribuida
+                           (tambien: operacion <expresion>). La ejecuta el
+                           nodo con mayor F(i,j); si se cae, se reasigna.
+                           Ej: calc (10 + 20) * 2^3, calc sqrt(2) * pi
+    estres <seg> [partes] [mb]
+                           reparte 'partes' tareas que ocupan un nucleo
+                           entero durante 'seg' segundos (y reservan 'mb'
+                           de memoria) para ver su costo en el monitor
     yo                     el estado de este nodo
     red                    estado de bat0 y vecinos de batman-adv
     stats                  contadores de trafico
@@ -59,6 +68,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
 from src.api import Nodo
 from src.communication import APP_MSG, PING, PONG, malla
 
+from operaciones import ExpresionInvalida, calcular, estresar
+
 DIFUSION_LOCAL = "127.255.255.255"
 PUERTO_TCP = 5001
 SERVICIOS = ["mensajeria"]
@@ -69,7 +80,9 @@ AYUDA = """  comandos:
     msg <nodo> <texto>         mensaje directo
     grupo <grupo> <texto>      mensaje a un grupo
     unir <grupo> | dejar <grupo>
-    suma <a> <b> ...           tarea distribuida: la ejecuta el mejor nodo
+    archivo <nodo> <ruta>      enviar un archivo
+    calc <expresion>           operacion matematica: la ejecuta el mejor nodo
+    estres <seg> [partes] [mb] carga de CPU repartida en la red
     ping <nodo> | red | stats | salir"""
 
 
@@ -83,11 +96,17 @@ def leer_argumentos():
     p.add_argument("--puerto", type=int)
     p.add_argument("--grupos", default="")
     p.add_argument("--logs", default="logs")
+    p.add_argument("--archivos", default="recibidos")
     return p.parse_args()
 
 
-def sumar(numeros):
-    return sum(float(n) for n in numeros)
+def tamano_legible(n):
+    if n < 1024:
+        return f"{n} B"
+    for unidad in ("KB", "MB", "GB"):
+        n /= 1024
+        if n < 1024 or unidad == "GB":
+            return f"{n:.1f} {unidad}"
 
 
 class Mensajeria:
@@ -96,10 +115,12 @@ class Mensajeria:
         self.nodo = self.arrancar(args)
 
     def configurar(self, nodo):
-        nodo.registrar_operacion("suma", sumar)
+        nodo.registrar_operacion("calcular", calcular)
+        nodo.registrar_operacion("estresar", estresar)
         nodo.al_recibir(APP_MSG, self.al_llegar_mensaje)
         nodo.al_recibir(PING, self.al_llegar_ping)
         nodo.al_recibir(PONG, self.al_llegar_pong)
+        nodo.cuando_llegue_archivo(self.al_llegar_archivo)
         nodo.cuando_entre(self.al_entrar)
         nodo.cuando_sospeche(
             lambda nid: self.avisar(f"{self.nombre_de(nid)} no responde "
@@ -128,7 +149,8 @@ class Mensajeria:
                                      else base)
             nodo = Nodo(nombre, interfaz=interfaz, difusion=difusion,
                         puerto_tcp=puerto, servicios=SERVICIOS,
-                        carpeta_logs=args.logs)
+                        carpeta_logs=args.logs,
+                        carpeta_archivos=args.archivos)
             for g in filter(None, args.grupos.split(",")):
                 nodo.unirse_a_grupo(g.strip())
             self.nodo = nodo
@@ -174,6 +196,11 @@ class Mensajeria:
             self.avisar(f"respuesta de {self.nombre_de(m.sender)}: "
                         f"{ms:.1f} ms")
 
+    def al_llegar_archivo(self, info):
+        self.avisar(f"{self.nombre_de(info['de'])} te envio el archivo "
+                    f"{info['nombre']} ({tamano_legible(info['tamano'])}), "
+                    f"guardado en {info['ruta']}")
+
     @staticmethod
     def en_segundo_plano(funcion, *args):
         threading.Thread(target=funcion, args=args, daemon=True).start()
@@ -206,18 +233,70 @@ class Mensajeria:
         self.informar_envio(self.nodo.enviar_a_grupo(grupo, {"texto": texto}),
                             f"al grupo {grupo}")
 
-    def pedir_suma(self, numeros):
-        futuro = self.nodo.enviar_tarea_async("suma", numeros, timeout=10.0)
+    def pedir_calculo(self, expresion):
+        futuro = self.nodo.enviar_tarea_async("calcular", expresion,
+                                              timeout=10.0)
         try:
             resultado = futuro.result()
         except Exception as e:
-            self.avisar(f"la suma fallo: {e}")
+            self.avisar(f"{expresion}: fallo ({e})")
             return
         t = futuro.tarea
         donde = [self.nombre_de(n) for n in t.historial]
-        self.avisar(f"suma {' + '.join(numeros)} = {resultado:g}  "
+        if isinstance(resultado, float):
+            resultado = f"{resultado:.10g}"
+        self.avisar(f"{expresion} = {resultado}  "
                     f"(la ejecuto {self.nombre_de(t.ejecutor)}; "
                     f"intentos: {' -> '.join(donde)})")
+
+    def pedir_estres(self, segundos, partes, mb):
+        inicio = time.monotonic()
+        futuros = [self.nodo.enviar_tarea_async(
+            "estresar", {"segundos": segundos, "mb": mb,
+                         "desde": 10_000_000 * (i + 1)},
+            timeout=segundos * (partes + 1) + 15)
+            for i in range(partes)]
+        por_nodo = {}
+        fallidas = 0
+        for i, futuro in enumerate(futuros, 1):
+            try:
+                r = futuro.result()
+            except Exception as e:
+                fallidas += 1
+                self.avisar(f"estres: la parte {i}/{partes} fallo ({e})")
+                continue
+            quien = self.nombre_de(futuro.tarea.ejecutor)
+            print(f"  estres: parte {i}/{partes} lista en {quien} "
+                  f"({r['revisados']:,} numeros, {r['primos']:,} primos, "
+                  f"{r['segundos']:.1f} s)", flush=True)
+            cuenta = por_nodo.setdefault(quien, [0, 0])
+            cuenta[0] += 1
+            cuenta[1] += r["revisados"]
+        total = time.monotonic() - inicio
+        reparto = ", ".join(f"{n}: {p} parte{'s' if p > 1 else ''}"
+                            for n, (p, _) in sorted(por_nodo.items()))
+        revisados = sum(r for _, r in por_nodo.values())
+        self.avisar(f"estres terminado en {total:.1f} s: {revisados:,} "
+                    f"numeros revisados. Reparto: {reparto or '-'}"
+                    + (f". Fallaron {fallidas}" if fallidas else ""))
+
+    def mandar_archivo(self, v, ruta):
+        avisados = set()
+
+        def avance(i, total):
+            cuarto = i * 4 // total
+            if 0 < cuarto < 4 and cuarto not in avisados:
+                avisados.add(cuarto)
+                print(f"  {os.path.basename(ruta)}: {cuarto * 25}%",
+                      flush=True)
+
+        r = self.nodo.enviar_archivo(v.node_id, ruta, al_avanzar=avance)
+        if r["entregado"]:
+            self.avisar(f"{r['nombre']} llego completo a {v.nombre} "
+                        f"({tamano_legible(r['tamano'])} en "
+                        f"{r['segundos']:.1f} s)")
+        else:
+            self.avisar(f"{r['nombre']} no llego a {v.nombre}: {r['error']}")
 
     def lista(self):
         vecinos = self.nodo.consultar_estado_red(incluir_caidos=True)
@@ -287,15 +366,31 @@ class Mensajeria:
             if v:
                 self.en_segundo_plano(self.mandar_directo, v.node_id,
                                       {"t0": time.time()}, PING, None)
-        elif orden == "suma" and len(partes) > 1:
-            numeros = linea.split()[1:]
-            try:
-                [float(n) for n in numeros]
-            except ValueError:
-                print("  uso: suma 10 20 ...")
+        elif orden == "archivo" and len(partes) > 2:
+            ruta = os.path.expanduser(partes[2].strip().strip("\"'"))
+            if not os.path.isfile(ruta):
+                print(f"  no encuentro el archivo {ruta}")
                 return
-            print("  tarea enviada a la red...")
-            self.en_segundo_plano(self.pedir_suma, numeros)
+            v = self.destino(partes[1])
+            if v:
+                print(f"  enviando {os.path.basename(ruta)} "
+                      f"({tamano_legible(os.path.getsize(ruta))}) "
+                      f"a {v.nombre}...", flush=True)
+                self.en_segundo_plano(self.mandar_archivo, v, ruta)
+        elif orden in ("calc", "operacion") and len(partes) > 1:
+            expresion = linea.split(" ", 1)[1].strip()
+            try:
+                calcular(expresion)
+            except ExpresionInvalida as e:
+                print(f"  {e}")
+                print("  ej: calc (10 + 20) * 2^3   calc sqrt(2) * pi")
+                return
+            except (ArithmeticError, ValueError, TypeError):
+                pass
+            print("  operacion enviada a la red...")
+            self.en_segundo_plano(self.pedir_calculo, expresion)
+        elif orden == "estres":
+            self.ejecutar_estres(linea.split()[1:])
         elif orden == "red":
             for clave, valor in malla.resumen(self.nodo.interfaz).items():
                 print(f"  {clave}: {valor}")
@@ -304,6 +399,26 @@ class Mensajeria:
                 print(f"  {clave}: {valor}")
         else:
             print(AYUDA)
+
+    def ejecutar_estres(self, valores):
+        try:
+            segundos = float(valores[0]) if valores else 10.0
+            ofrecen = len(self.nodo.que_ofrezcan(["estresar"]))
+            partes = int(valores[1]) if len(valores) > 1 else max(1, ofrecen)
+            mb = int(valores[2]) if len(valores) > 2 else 0
+        except ValueError:
+            print("  uso: estres <segundos> [partes] [mb]   "
+                  "ej: estres 15 4 200")
+            return
+        if not (1 <= segundos <= 120 and 1 <= partes <= 32
+                and 0 <= mb <= 1024):
+            print("  limites: 1-120 segundos, 1-32 partes, 0-1024 mb")
+            return
+        print(f"  estres: {partes} parte(s) de {segundos:g} s"
+              + (f" y {mb} MB" if mb else "")
+              + f" para {ofrecen} nodo(s) que la ofrecen. Mire el monitor.",
+              flush=True)
+        self.en_segundo_plano(self.pedir_estres, segundos, partes, mb)
 
     def presentar(self):
         e = self.nodo.obtener_estado()
