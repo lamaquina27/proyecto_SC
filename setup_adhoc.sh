@@ -34,7 +34,7 @@ echo "== entregando $WIFI a batman-adv =="
 batctl if add "$WIFI" 2>/dev/null || batctl meshif bat0 interface add "$WIFI"
 ip link set up dev bat0
 ip addr flush dev "$WIFI"
-ip addr add "${RED}.${NUM}/24" dev bat0
+ip addr add "${RED}.${NUM}/24" brd + dev bat0
 
 echo
 echo "Listo. bat0 = ${RED}.${NUM}"
