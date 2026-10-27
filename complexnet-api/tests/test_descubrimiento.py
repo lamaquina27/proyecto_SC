@@ -135,7 +135,8 @@ def test_los_dos_umbrales_de_fallo():
         d2._corriendo = False
         m2.detener()
 
-        time.sleep(2.0)
+        # margen de 1,5 s sobre cada umbral: la vigilancia revisa cada segundo
+        time.sleep(3.5)
         assert d1.por_nombre("nodo-B").status == SOSPECHOSO
         assert caidos == []           # todavia no lo damos por muerto
 

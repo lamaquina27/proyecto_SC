@@ -755,17 +755,49 @@ with Nodo("nodo-01") as nodo:
   `passwd` dentro de la carpeta.
 - Una recepción que pasa 120 s sin recibir trozos (`nodo.archivos.abandono`)
   se borra la próxima vez que llegue cualquier trozo.
+- Un trozo cuya posición se sale del tamaño anunciado se ignora.
+
+### 10.1 Compresión
+
+El porqué está en `diseno.md`, decisión 26.
+
+- **Automática:** antes de partir el archivo, quien envía prueba comprimir
+  una muestra de 256 KB con `zlib`. Si baja al menos un 10 %, comprime el
+  archivo entero (por bloques, a un temporal que se borra al terminar) y
+  manda eso. Si no, o si el archivo pesa menos de 1 KB, va tal cual.
+- **Quien recibe descomprime al final**, antes de comparar la huella. El
+  `tamano` y el `sha256` son siempre los del archivo original, así que lo que
+  queda en `recibidos/` es idéntico a lo que se mandó.
+- Si lo descomprimido pasa del `tamano` anunciado, se corta y se rechaza
+  (protección contra bombas de compresión).
+
+```python
+r = nodo.enviar_archivo("nodo-02", "censo.txt")        # automático
+r = nodo.enviar_archivo("nodo-02", "foto.jpg", comprimir=False)   # nunca
+r = nodo.enviar_archivo("nodo-02", "datos.bin", comprimir=True)   # siempre
+print(r["comprimido"], r["tamano"], r["tamano_enviado"])
+```
+
+Ejemplo real con la mensajería: un `censo.txt` de 1,0 MB viajó en 3,1 KB
+(99,7 % menos); una foto de 390 KB fue tal cual.
+
+### 10.2 Referencia
 
 | Método / atributo | Descripción |
 |---|---|
-| `enviar(ip, puerto, receiver, ruta, nombre=None, timeout=30.0, al_avanzar=None)` | Lo que usa `Nodo.enviar_archivo` |
+| `enviar(ip, puerto, receiver, ruta, nombre=None, timeout=30.0, al_avanzar=None, comprimir=None)` | Lo que usa `Nodo.enviar_archivo`. `comprimir`: `None` automático, `True` siempre, `False` nunca |
 | `cuando_llegue(funcion)` | Lo que usa `Nodo.cuando_llegue_archivo` |
-| `en_curso()` | Las recepciones sin terminar: `transfer_id`, `nombre`, `de`, `recibidos`, `trozos` |
-| `trozo`, `abandono`, `carpeta` | Configuración, modificable |
+| `en_curso()` | Las recepciones sin terminar: `transfer_id`, `nombre`, `de`, `recibidos`, `trozos`, `comprimido` |
+| `trozo`, `abandono`, `carpeta`, `nivel` | Configuración, modificable (`nivel` de zlib, 6 por defecto) |
+
+`enviar` devuelve un diccionario con `entregado`, `error`, `ruta`, `nombre`,
+`tamano`, `sha256`, `trozos`, `segundos`, `comprimido` y `tamano_enviado`. La
+función de `cuando_llegue` recibe `nombre`, `ruta`, `tamano`, `sha256`, `de`,
+`ip`, `comprimido` y `tamano_enviado`.
 
 | Tipo | Va por | Payload |
 |---|---|---|
-| `FILE_CHUNK` | TCP, al destino | `transfer_id`, `nombre`, `tamano`, `sha256`, `indice`, `total`, `posicion`, `puerto_tcp`, `datos` (base64) |
+| `FILE_CHUNK` | TCP, al destino | `transfer_id`, `nombre`, `tamano`, `sha256`, `indice`, `total`, `posicion`, `puerto_tcp`, `datos` (base64); si va comprimido, además `compresion` (`"zlib"`) y `tamano_enviado` |
 | `FILE_ACK` | TCP, a quien envió | `transfer_id`, `ok`, `error`, `ruta` |
 
 Eventos del registro: `archivo_envio` y `archivo_enviado` o `archivo_fallido`

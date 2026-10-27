@@ -36,7 +36,9 @@ Comandos dentro del programa:
     dejar <grupo>          salir de un grupo
     ping <nodo>            tiempo de ida y vuelta
     archivo <nodo> <ruta>  envia un archivo; el otro nodo lo guarda en su
-                           carpeta de recibidos y avisa al llegar
+                           carpeta de recibidos y avisa al llegar. Si vale
+                           la pena, viaja comprimido (zlib) y se descomprime
+                           al llegar; fotos y videos van tal cual
     calc <expresion>       operacion matematica como tarea distribuida
                            (tambien: operacion <expresion>). La ejecuta el
                            nodo con mayor F(i,j); si se cae, se reasigna.
@@ -107,6 +109,14 @@ def tamano_legible(n):
         n /= 1024
         if n < 1024 or unidad == "GB":
             return f"{n:.1f} {unidad}"
+
+
+def compresion_legible(r):
+    if not r.get("comprimido") or not r.get("tamano"):
+        return ""
+    ahorro = 100 * (1 - r["tamano_enviado"] / r["tamano"])
+    return (f", viajo comprimido en {tamano_legible(r['tamano_enviado'])}: "
+            f"{ahorro:.1f}% menos")
 
 
 class Mensajeria:
@@ -198,7 +208,8 @@ class Mensajeria:
 
     def al_llegar_archivo(self, info):
         self.avisar(f"{self.nombre_de(info['de'])} te envio el archivo "
-                    f"{info['nombre']} ({tamano_legible(info['tamano'])}), "
+                    f"{info['nombre']} ({tamano_legible(info['tamano'])}"
+                    f"{compresion_legible(info)}), "
                     f"guardado en {info['ruta']}")
 
     @staticmethod
@@ -292,9 +303,10 @@ class Mensajeria:
 
         r = self.nodo.enviar_archivo(v.node_id, ruta, al_avanzar=avance)
         if r["entregado"]:
-            self.avisar(f"{r['nombre']} llego completo a {v.nombre} "
-                        f"({tamano_legible(r['tamano'])} en "
-                        f"{r['segundos']:.1f} s)")
+            self.avisar(f"{r['nombre']} llego completo a {v.nombre} en "
+                        f"{r['segundos']:.1f} s "
+                        f"({tamano_legible(r['tamano'])}"
+                        f"{compresion_legible(r)})")
         else:
             self.avisar(f"{r['nombre']} no llego a {v.nombre}: {r['error']}")
 

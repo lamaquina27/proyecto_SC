@@ -182,7 +182,7 @@ Cuando los tres estén arriba, en cualquiera de ellos:
 ```
 lista          debe mostrar a los otros dos como ACTIVO
 recursos       el estado de cada uno
-suma 10 20     debe dar 30 y decir qué nodo la hizo
+calc 10 + 20   debe dar 30 y decir qué nodo la hizo
 todos hola     debe aparecer en las otras dos pantallas
 ```
 

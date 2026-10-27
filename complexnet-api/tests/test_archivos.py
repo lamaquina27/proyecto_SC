@@ -186,3 +186,163 @@ def test_una_recepcion_abandonada_se_borra(pareja, tmp_path):
                            posicion=0))
     time.sleep(0.3)
     assert [r["transfer_id"] for r in b.archivos.en_curso()] == ["otro0001"]
+
+
+def test_un_trozo_fuera_del_archivo_se_ignora(pareja, tmp_path):
+    """Nadie puede escribir mas alla del tamano que anuncio."""
+    a, b = pareja
+    a.mensajes.enviar("127.0.0.1", b.puerto, FILE_CHUNK, b.node_id, {
+        "transfer_id": "lejos001", "nombre": "x.txt", "tamano": 4,
+        "sha256": "0" * 64, "indice": 0, "total": 2,
+        "posicion": 10 ** 12, "puerto_tcp": a.puerto, "datos": "aG9sYQ=="})
+    time.sleep(0.5)
+    parcial = os.path.join(b.archivos.carpeta, ".parciales",
+                           f"{a.node_id}-lejos001")
+    assert os.path.getsize(parcial) == 0
+    assert b.archivos.en_curso()[0]["recibidos"] == 0
+
+
+# ------------------------------------------------------------ compresion
+
+TEXTO = ("Censo albergue norte: 42 personas, 7 heridos leves, falta agua. "
+         * 4000).encode()
+
+
+def esperar(lista):
+    for _ in range(40):
+        if lista:
+            return lista
+        time.sleep(0.05)
+    return lista
+
+
+def test_un_texto_viaja_comprimido_y_llega_igual(pareja, tmp_path):
+    a, b = pareja
+    llegados = []
+    b.cuando_llegue_archivo(llegados.append)
+    ruta = escribir(tmp_path / "censo.txt", TEXTO)
+
+    r = a.enviar_archivo("nodo-B", ruta)
+
+    assert r["entregado"] is True
+    assert r["comprimido"] is True
+    assert r["tamano"] == len(TEXTO)
+    assert r["tamano_enviado"] < len(TEXTO) / 20
+    assert leer(r["ruta"]) == TEXTO
+    info = esperar(llegados)[0]
+    assert info["comprimido"] is True
+    assert info["tamano"] == len(TEXTO)
+    assert info["tamano_enviado"] == r["tamano_enviado"]
+
+
+def test_lo_que_no_se_comprime_va_tal_cual(pareja, tmp_path):
+    """Una foto o un zip ya vienen comprimidos: no se gasta CPU en vano."""
+    a, _ = pareja
+    datos = os.urandom(60_000)
+    r = a.enviar_archivo("nodo-B", escribir(tmp_path / "foto.jpg", datos))
+    assert r["entregado"] is True
+    assert r["comprimido"] is False
+    assert r["tamano_enviado"] == len(datos)
+    assert leer(r["ruta"]) == datos
+
+
+def test_un_archivo_pequeno_no_se_comprime(pareja, tmp_path):
+    a, _ = pareja
+    r = a.enviar_archivo("nodo-B", escribir(tmp_path / "n.txt", b"a" * 500))
+    assert r["comprimido"] is False
+    assert leer(r["ruta"]) == b"a" * 500
+
+
+def test_se_puede_obligar_o_prohibir_la_compresion(pareja, tmp_path):
+    a, _ = pareja
+    texto = escribir(tmp_path / "t.txt", TEXTO)
+    azar = escribir(tmp_path / "z.bin", os.urandom(30_000))
+
+    sin = a.enviar_archivo("nodo-B", texto, comprimir=False)
+    con = a.enviar_archivo("nodo-B", azar, comprimir=True)
+
+    assert sin["comprimido"] is False and sin["tamano_enviado"] == len(TEXTO)
+    assert con["comprimido"] is True
+    assert leer(sin["ruta"]) == TEXTO
+    assert leer(con["ruta"]) == leer(azar)
+
+
+def test_comprimido_en_muchos_trozos(pareja, tmp_path):
+    a, _ = pareja
+    a.archivos.trozo = 1024
+    datos = TEXTO + os.urandom(20_000)
+    r = a.enviar_archivo("nodo-B", escribir(tmp_path / "mixto.bin", datos))
+    assert r["entregado"] is True
+    assert r["comprimido"] is True
+    assert r["trozos"] > 5
+    assert leer(r["ruta"]) == datos
+
+
+def test_no_deja_temporales_en_quien_envia(pareja, tmp_path, monkeypatch):
+    import tempfile
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path / "tmp"))
+    os.makedirs(tmp_path / "tmp")
+    a, _ = pareja
+    a.enviar_archivo("nodo-B", escribir(tmp_path / "c.txt", TEXTO))
+    assert os.listdir(tmp_path / "tmp") == []
+
+
+def trozo_comprimido(a, b, transfer_id, comprimidos, tamano, compresion="zlib"):
+    import base64
+    import hashlib
+    a.mensajes.enviar("127.0.0.1", b.puerto, FILE_CHUNK, b.node_id, {
+        "transfer_id": transfer_id, "nombre": "bomba.txt", "tamano": tamano,
+        "sha256": hashlib.sha256(b"x" * tamano).hexdigest(),
+        "indice": 0, "total": 1, "posicion": 0, "puerto_tcp": a.puerto,
+        "compresion": compresion, "tamano_enviado": len(comprimidos),
+        "datos": base64.b64encode(comprimidos).decode()})
+
+
+def respuestas_de(a):
+    respuestas = []
+    a.al_recibir(FILE_ACK, lambda m, ip: respuestas.append(m.payload))
+    return respuestas
+
+
+def test_una_bomba_de_compresion_se_rechaza(pareja, tmp_path):
+    """Pocos bytes que al descomprimirse pasan de lo anunciado."""
+    import zlib
+    a, b = pareja
+    respuestas = respuestas_de(a)
+    trozo_comprimido(a, b, "bomba001", zlib.compress(b"x" * 5_000_000), 100)
+    assert esperar(respuestas)[0]["ok"] is False
+    assert "mas grande de lo anunciado" in respuestas[0]["error"]
+    assert not os.path.exists(os.path.join(b.archivos.carpeta, "bomba.txt"))
+
+
+def test_datos_comprimidos_danados_se_rechazan(pareja, tmp_path):
+    a, b = pareja
+    respuestas = respuestas_de(a)
+    trozo_comprimido(a, b, "malo0001", b"esto no es zlib", 100)
+    assert esperar(respuestas)[0]["ok"] is False
+    assert "descomprimir" in respuestas[0]["error"]
+
+
+def test_una_compresion_desconocida_se_rechaza(pareja, tmp_path):
+    import zlib
+    a, b = pareja
+    respuestas = respuestas_de(a)
+    trozo_comprimido(a, b, "lzma0001", zlib.compress(b"x" * 100), 100,
+                     compresion="lzma")
+    assert esperar(respuestas)[0]["ok"] is False
+    assert "no soportada" in respuestas[0]["error"]
+
+
+def test_un_nodo_viejo_sin_compresion_sigue_funcionando(pareja, tmp_path):
+    """Un FILE_CHUNK sin el campo compresion se toma como archivo plano."""
+    import base64
+    import hashlib
+    a, b = pareja
+    respuestas = respuestas_de(a)
+    a.mensajes.enviar("127.0.0.1", b.puerto, FILE_CHUNK, b.node_id, {
+        "transfer_id": "viejo001", "nombre": "viejo.txt", "tamano": 4,
+        "sha256": hashlib.sha256(b"hola").hexdigest(), "indice": 0,
+        "total": 1, "posicion": 0, "puerto_tcp": a.puerto,
+        "datos": base64.b64encode(b"hola").decode()})
+    assert esperar(respuestas)[0]["ok"] is True
+    assert leer(respuestas[0]["ruta"]) == b"hola"

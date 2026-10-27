@@ -1,3 +1,4 @@
+import ipaddress
 import socket
 import struct
 import subprocess
@@ -9,7 +10,9 @@ except ImportError:
 
 SIOCGIFADDR = 0x8915
 SIOCGIFBRDADDR = 0x8919
+SIOCGIFNETMASK = 0x891B
 SIOCGIFMTU = 0x8921
+SIN_DIFUSION = "0.0.0.0"
 
 
 def _consultar(interfaz, operacion):
@@ -30,9 +33,29 @@ def ip_de(interfaz="bat0"):
     return socket.inet_ntoa(r[20:24]) if r else None
 
 
+def mascara_de(interfaz="bat0"):
+    r = _consultar(interfaz, SIOCGIFNETMASK)
+    return socket.inet_ntoa(r[20:24]) if r else None
+
+
+def difusion_calculada(ip, mascara):
+    if not ip or not mascara:
+        return None
+    try:
+        red = ipaddress.IPv4Network(f"{ip}/{mascara}", strict=False)
+    except ValueError:
+        return None
+    if red.prefixlen >= 31:
+        return None
+    return str(red.broadcast_address)
+
+
 def difusion_de(interfaz="bat0"):
     r = _consultar(interfaz, SIOCGIFBRDADDR)
-    return socket.inet_ntoa(r[20:24]) if r else None
+    difusion = socket.inet_ntoa(r[20:24]) if r else None
+    if difusion and difusion != SIN_DIFUSION:
+        return difusion
+    return difusion_calculada(ip_de(interfaz), mascara_de(interfaz))
 
 
 def mtu_de(interfaz="bat0"):
@@ -82,6 +105,7 @@ def resumen(interfaz="bat0"):
         "existe": existe(interfaz),
         "ip": ip_de(interfaz),
         "difusion": difusion_de(interfaz),
+        "mascara": mascara_de(interfaz),
         "mtu": mtu_de(interfaz),
         "vecinos_directos": len(vecinos_batman()),
         "calidad_promedio": calidad_promedio(),

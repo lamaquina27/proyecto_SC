@@ -403,3 +403,55 @@ espera a su proceso.
 El tiempo máximo de cada parte es `seg · (partes + 1) + 15` s. Así una parte
 que espera en la cola de un nodo ocupado no se reasigna por tiempo
 (decisión 21) antes de empezar.
+
+## Compresión y difusión
+
+### 26. Los archivos viajan comprimidos cuando vale la pena
+
+En una malla Wi-Fi de varios saltos el ancho de banda es lo más escaso: cada
+salto repite la transmisión. Un censo, una lista de personas o un registro de
+texto se comprimen 10 o 20 veces, así que mandarlos comprimidos llega mucho
+antes y deja la red libre para los demás. Se hace dentro de
+`ServicioArchivos`, sin cambiar la forma de usarlo:
+
+1. **Quien envía comprime antes de partir el archivo**, con `zlib` (viene con
+   Python, no hay que instalar nada en la USB). Se comprime a un archivo
+   temporal, por bloques de 1 MB, para no cargar el archivo entero en
+   memoria, y el temporal se borra al terminar.
+2. **Solo si vale la pena.** Primero comprime una muestra de 256 KB: si no
+   baja al menos un 10 %, el archivo va tal cual. Fotos, videos y `.zip` ya
+   vienen comprimidos, y comprimirlos otra vez gastaría CPU de la Raspberry
+   sin ahorrar nada. Lo mismo con archivos de menos de 1 KB. Si después de
+   comprimir todo no se ahorró al menos el 10 %, también va tal cual.
+   `enviar_archivo(..., comprimir=True)` obliga y `comprimir=False` prohíbe.
+3. **Los trozos llevan dos campos más:** `compresion` (`"zlib"`) y
+   `tamano_enviado` (lo que pesa comprimido). `tamano` y `sha256` siguen
+   siendo los del archivo **original**.
+4. **Quien recibe junta los trozos, descomprime y recién ahí compara la
+   huella** del original. Así la huella comprueba todo el camino: comprimir,
+   viajar y descomprimir.
+5. **Protección contra bombas de compresión.** Unos pocos KB pueden
+   descomprimirse en gigas y llenar la RAM de un nodo que corre con `toram`.
+   La descompresión se corta en cuanto pasa del `tamano` anunciado, y el
+   archivo se rechaza.
+6. **Compatible hacia atrás.** Un trozo sin el campo `compresion` se toma
+   como archivo plano. Una compresión desconocida se rechaza con un error
+   claro en vez de guardar basura.
+
+De paso, el receptor ahora ignora un trozo cuya posición se sale del tamaño
+anunciado. Antes se podía escribir en cualquier posición del archivo parcial.
+
+*Para la sustentación:* "Comprimimos solo lo que se puede comprimir y lo
+comprobamos de punta a punta con la huella del original. En una malla con
+poco ancho de banda, mandar 3 KB en vez de 1 MB es la diferencia entre que
+llegue o no."
+
+### 27. La difusión se calcula si Linux no la da
+
+Si a `bat0` se le asigna la IP sin `brd +`, Linux deja su dirección de
+difusión en `0.0.0.0`, y antes el código la usaba tal cual: los HELLO y
+HEARTBEAT no le llegaban a nadie. Se encontró probando en la red real, y
+`setup_adhoc.sh` ya pone `brd +`. Además, `malla.difusion_de()` ahora
+descarta `0.0.0.0` y calcula la difusión con la IP y la máscara de la
+interfaz (`10.10.0.3/24` → `10.10.0.255`). Así se sigue cumpliendo la
+decisión 1 aunque alguien configure `bat0` a mano.

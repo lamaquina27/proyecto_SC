@@ -1,9 +1,11 @@
 import base64
 import hashlib
 import os
+import tempfile
 import threading
 import time
 import uuid
+import zlib
 
 from .message import FILE_ACK, FILE_CHUNK
 
@@ -11,11 +13,18 @@ TROZO = 256 * 1024
 ABANDONO = 120.0
 CARPETA_PARCIALES = ".parciales"
 
+ZLIB = "zlib"
+NIVEL = 6
+MUESTRA = 256 * 1024
+MINIMO_COMPRIMIR = 1024
+VALE_LA_PENA = 0.9
+BLOQUE = 1024 * 1024
+
 
 def huella(ruta):
     h = hashlib.sha256()
     with open(ruta, "rb") as f:
-        for bloque in iter(lambda: f.read(1024 * 1024), b""):
+        for bloque in iter(lambda: f.read(BLOQUE), b""):
             h.update(bloque)
     return h.hexdigest()
 
@@ -27,9 +36,43 @@ def nombre_seguro(nombre):
     return nombre
 
 
+def comprimir_archivo(ruta, destino, nivel=NIVEL):
+    compresor = zlib.compressobj(nivel)
+    with open(ruta, "rb") as entrada, open(destino, "wb") as salida:
+        for bloque in iter(lambda: entrada.read(BLOQUE), b""):
+            salida.write(compresor.compress(bloque))
+        salida.write(compresor.flush())
+    return os.path.getsize(destino)
+
+
+def descomprimir_archivo(ruta, destino, limite):
+    descompresor = zlib.decompressobj()
+    escritos = 0
+
+    def escribir(salida, datos):
+        nonlocal escritos
+        escritos += len(datos)
+        if escritos > limite:
+            raise ValueError("lo descomprimido es mas grande de lo anunciado")
+        salida.write(datos)
+
+    with open(ruta, "rb") as entrada, open(destino, "wb") as salida:
+        for bloque in iter(lambda: entrada.read(BLOQUE), b""):
+            datos = descompresor.decompress(bloque, BLOQUE)
+            escribir(salida, datos)
+            while descompresor.unconsumed_tail:
+                datos = descompresor.decompress(
+                    descompresor.unconsumed_tail, BLOQUE)
+                escribir(salida, datos)
+        escribir(salida, descompresor.flush())
+    if not descompresor.eof:
+        raise ValueError("los datos comprimidos estan incompletos")
+    return escritos
+
+
 class _Recepcion:
     def __init__(self, transfer_id, sender, nombre, tamano, sha256, total,
-                 puerto, ruta_parcial):
+                 puerto, ruta_parcial, compresion=None, tamano_enviado=None):
         self.transfer_id = transfer_id
         self.sender = sender
         self.nombre = nombre
@@ -38,6 +81,8 @@ class _Recepcion:
         self.total = total
         self.puerto = puerto
         self.ruta_parcial = ruta_parcial
+        self.compresion = compresion
+        self.tamano_enviado = tamano if tamano_enviado is None else tamano_enviado
         self.recibidos = set()
         self.cerrando = False
         self.ultimo = time.monotonic()
@@ -45,11 +90,12 @@ class _Recepcion:
 
 class ServicioArchivos:
     def __init__(self, mensajes, carpeta="recibidos", trozo=TROZO,
-                 abandono=ABANDONO):
+                 abandono=ABANDONO, nivel=NIVEL):
         self.mensajes = mensajes
         self.carpeta = carpeta
         self.trozo = trozo
         self.abandono = abandono
+        self.nivel = nivel
         self.registro = None
         self.node_id = mensajes.node_id
 
@@ -68,14 +114,54 @@ class ServicioArchivos:
     def cuando_llegue(self, funcion):
         self._al_llegar.append(funcion)
 
+    def _vale_comprimir(self, ruta, tamano):
+        if tamano < MINIMO_COMPRIMIR:
+            return False
+        with open(ruta, "rb") as f:
+            muestra = f.read(MUESTRA)
+        return len(zlib.compress(muestra, self.nivel)) < len(muestra) * VALE_LA_PENA
+
+    def _preparar(self, ruta, tamano, comprimir):
+        if comprimir is False:
+            return None
+        if comprimir is None and not self._vale_comprimir(ruta, tamano):
+            return None
+        descriptor, temporal = tempfile.mkstemp(prefix="complexnet-",
+                                                suffix=".zlib")
+        os.close(descriptor)
+        try:
+            comprimido = comprimir_archivo(ruta, temporal, self.nivel)
+        except Exception:
+            os.remove(temporal)
+            raise
+        if comprimir is None and comprimido >= tamano * VALE_LA_PENA:
+            os.remove(temporal)
+            return None
+        return temporal
+
     def enviar(self, ip, puerto, receiver, ruta, nombre=None, timeout=30.0,
-               al_avanzar=None):
+               al_avanzar=None, comprimir=None):
         tamano = os.path.getsize(ruta)
         nombre = nombre_seguro(nombre or ruta)
         sha256 = huella(ruta)
-        total = max(1, -(-tamano // self.trozo))
-        transfer_id = uuid.uuid4().hex[:8]
         inicio = time.monotonic()
+        temporal = self._preparar(ruta, tamano, comprimir)
+        try:
+            return self._enviar_trozos(ip, puerto, receiver, temporal or ruta,
+                                       nombre, tamano, sha256, temporal,
+                                       timeout, al_avanzar, inicio)
+        finally:
+            if temporal is not None:
+                try:
+                    os.remove(temporal)
+                except OSError:
+                    pass
+
+    def _enviar_trozos(self, ip, puerto, receiver, origen, nombre, tamano,
+                       sha256, comprimido, timeout, al_avanzar, inicio):
+        tamano_enviado = os.path.getsize(origen)
+        total = max(1, -(-tamano_enviado // self.trozo))
+        transfer_id = uuid.uuid4().hex[:8]
 
         listo = threading.Event()
         with self._candado:
@@ -83,11 +169,15 @@ class ServicioArchivos:
 
         resultado = {"transfer_id": transfer_id, "nombre": nombre,
                      "tamano": tamano, "trozos": total, "sha256": sha256,
+                     "comprimido": comprimido is not None,
+                     "tamano_enviado": tamano_enviado,
                      "entregado": False, "ruta": None, "error": None}
         self._evento("archivo_envio", transfer=transfer_id, nombre=nombre,
-                     tamano=tamano, trozos=total, destino=receiver)
+                     tamano=tamano, trozos=total, destino=receiver,
+                     compresion=ZLIB if comprimido else None,
+                     tamano_enviado=tamano_enviado)
         try:
-            with open(ruta, "rb") as f:
+            with open(origen, "rb") as f:
                 for indice in range(total):
                     datos = f.read(self.trozo)
                     payload = {
@@ -98,6 +188,9 @@ class ServicioArchivos:
                         "puerto_tcp": self.mensajes.puerto_tcp,
                         "datos": base64.b64encode(datos).decode("ascii"),
                     }
+                    if comprimido is not None:
+                        payload["compresion"] = ZLIB
+                        payload["tamano_enviado"] = tamano_enviado
                     if self.mensajes.enviar(ip, puerto, FILE_CHUNK, receiver,
                                             payload) is None:
                         resultado["error"] = (f"no se pudo entregar el trozo "
@@ -127,6 +220,7 @@ class ServicioArchivos:
             self._evento("archivo_enviado", transfer=resultado["transfer_id"],
                          nombre=resultado["nombre"],
                          tamano=resultado["tamano"],
+                         tamano_enviado=resultado["tamano_enviado"],
                          segundos=resultado["segundos"])
         else:
             self._evento("archivo_fallido", transfer=resultado["transfer_id"],
@@ -150,6 +244,8 @@ class ServicioArchivos:
             total = int(p["total"])
             posicion = int(p["posicion"])
             datos = base64.b64decode(p["datos"])
+            tamano = int(p.get("tamano", 0))
+            tamano_enviado = int(p.get("tamano_enviado", tamano))
         except (KeyError, TypeError, ValueError):
             return
         if not 0 <= indice < total or posicion < 0:
@@ -166,14 +262,17 @@ class ServicioArchivos:
                                     f"{mensaje.sender}-{transfer_id}")
                 open(ruta, "wb").close()
                 r = _Recepcion(transfer_id, mensaje.sender,
-                               nombre_seguro(p.get("nombre")),
-                               int(p.get("tamano", 0)), p.get("sha256"),
-                               total, p.get("puerto_tcp"), ruta)
+                               nombre_seguro(p.get("nombre")), tamano,
+                               p.get("sha256"), total, p.get("puerto_tcp"),
+                               ruta, p.get("compresion"), tamano_enviado)
                 self._recepciones[clave] = r
                 self._evento("archivo_llegando", transfer=transfer_id,
                              nombre=r.nombre, tamano=r.tamano, trozos=total,
-                             origen=mensaje.sender)
+                             origen=mensaje.sender, compresion=r.compresion,
+                             tamano_enviado=r.tamano_enviado)
             if r.cerrando or indice in r.recibidos:
+                return
+            if posicion + len(datos) > r.tamano_enviado:
                 return
             with open(r.ruta_parcial, "r+b") as f:
                 f.seek(posicion)
@@ -187,13 +286,29 @@ class ServicioArchivos:
 
         self._terminar(r, origen_ip)
 
+    def _revisar(self, r):
+        if os.path.getsize(r.ruta_parcial) != r.tamano_enviado:
+            return "el tamano no coincide"
+        if r.compresion is not None:
+            if r.compresion != ZLIB:
+                return f"compresion {r.compresion} no soportada"
+            descomprimido = r.ruta_parcial + ".descomprimido"
+            try:
+                descomprimir_archivo(r.ruta_parcial, descomprimido, r.tamano)
+                os.replace(descomprimido, r.ruta_parcial)
+            except (zlib.error, ValueError, OSError) as e:
+                if os.path.exists(descomprimido):
+                    os.remove(descomprimido)
+                return f"no se pudo descomprimir: {e}"
+            if os.path.getsize(r.ruta_parcial) != r.tamano:
+                return "el tamano descomprimido no coincide"
+        if huella(r.ruta_parcial) != r.sha256:
+            return "la huella sha256 no coincide"
+        return None
+
     def _terminar(self, r, origen_ip):
-        error = None
         ruta = None
-        if os.path.getsize(r.ruta_parcial) != r.tamano:
-            error = "el tamano no coincide"
-        elif huella(r.ruta_parcial) != r.sha256:
-            error = "la huella sha256 no coincide"
+        error = self._revisar(r)
         if error is None:
             ruta = self._ruta_libre(r.nombre)
             os.replace(r.ruta_parcial, ruta)
@@ -213,10 +328,13 @@ class ServicioArchivos:
 
         info = {"transfer_id": r.transfer_id, "nombre": r.nombre,
                 "ruta": ruta, "tamano": r.tamano, "sha256": r.sha256,
-                "de": r.sender, "ip": origen_ip}
+                "de": r.sender, "ip": origen_ip,
+                "comprimido": r.compresion is not None,
+                "tamano_enviado": r.tamano_enviado}
         self._evento("archivo_recibido", transfer=r.transfer_id,
                      nombre=r.nombre, tamano=r.tamano, origen=r.sender,
-                     ruta=ruta)
+                     ruta=ruta, compresion=r.compresion,
+                     tamano_enviado=r.tamano_enviado)
         for funcion in list(self._al_llegar):
             try:
                 funcion(info)
@@ -251,5 +369,5 @@ class ServicioArchivos:
         with self._candado:
             return [{"transfer_id": r.transfer_id, "nombre": r.nombre,
                      "de": r.sender, "recibidos": len(r.recibidos),
-                     "trozos": r.total}
+                     "trozos": r.total, "comprimido": r.compresion is not None}
                     for r in self._recepciones.values()]

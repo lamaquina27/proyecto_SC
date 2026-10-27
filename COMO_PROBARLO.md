@@ -253,6 +253,7 @@ restablece sola, sin que nadie configure nada.
 | Se recupera solo | Volver a prenderlo y verlo reintegrarse |
 | Recursos | `recursos`: el vector [C, M, B, R, A] de cada nodo |
 | Asignación de tareas | `calc 10 + 20`: responde 30 y dice qué nodo la ejecutó |
+| Archivos comprimidos | `archivo nodo-2 censo.txt` con un texto grande: dice "viajó comprimido en ... KB: 99 % menos" y llega idéntico. Con una foto `.jpg` va sin comprimir |
 | Reparto y costo | `estres 15` con `applications/monitor.py` abierto: cada nodo recibe una parte y se ve su CPU bajar |
 | Reasignación | Ver abajo |
 

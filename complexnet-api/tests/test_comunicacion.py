@@ -60,6 +60,16 @@ def test_limite_udp_sale_del_mtu():
     assert limite_udp(1280) == 1280 - 28      # malla con MTU chico: se adapta
 
 
+def test_difusion_calculada_cuando_linux_no_la_da():
+    """Sin 'brd +', Linux deja la difusion de bat0 en 0.0.0.0."""
+    from src.communication.malla import difusion_calculada
+    assert difusion_calculada("10.10.0.3", "255.255.255.0") == "10.10.0.255"
+    assert difusion_calculada("10.10.0.3", "255.255.0.0") == "10.10.255.255"
+    assert difusion_calculada("10.10.0.3", "255.255.255.255") is None
+    assert difusion_calculada(None, "255.255.255.0") is None
+    assert difusion_calculada("10.10.0.3", "basura") is None
+
+
 def test_reloj_lamport():
     r = RelojLamport()
     assert r.tick() == 1
