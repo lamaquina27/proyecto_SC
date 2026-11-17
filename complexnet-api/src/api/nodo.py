@@ -67,8 +67,8 @@ class Nodo:
         if not self.activo:
             return
         self.activo = False
-        self.tareas.detener()
         self.descubrimiento.detener(despedirse)
+        self.tareas.detener()
         self.mensajes.detener()
         if self.registro:
             self.registro.cerrar(self.mensajes)

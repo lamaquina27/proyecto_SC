@@ -71,11 +71,21 @@ complexnet-api/
 │   └── monitor.py         panel de monitoreo en terminal (observador, no recibe tareas)
 ├── tests/                 comunicacion, descubrimiento, integracion (3 nodos), api, tareas, archivos, operaciones
 ├── examples/              demos y analizar_logs.py
+├── experimentos/          medir.py (latencia, tareas, archivos, escalabilidad, fallos, malla),
+│                          graficas.py, resultados/*.json y graficas/*.png
 └── docs/
-    ├── diseno.md          el porqué de cada decisión (14-17 corte 1, 18-22 tareas, 23 archivos, 24-25 monitoreo y operaciones, 26 compresión, 27 difusión calculada)
+    ├── manual_desarrollador.md  cómo hacer una aplicación, desde cero (para cualquiera)
+    ├── informe_experimental.md  resultados de las mediciones y defectos encontrados
+    ├── diseno.md          el porqué de cada decisión (14-17 corte 1, 18-22 tareas, 23 archivos, 24-25 monitoreo y operaciones, 26 compresión, 27 difusión calculada, 28-29 correcciones de las mediciones)
     ├── entregables_corte2.md  qué falta de cada entregable y de quién es
     └── api/manual.md      manual técnico de cada operación
 ```
+
+En la raíz del repositorio hay un `README.md` para cualquier visitante. Las
+mediciones se repiten con `python experimentos/medir.py todo` (~10 min,
+loopback) y `sudo python3 experimentos/medir.py malla` en la red real; las
+gráficas necesitan `matplotlib`, que no está en `requirements.txt` porque los
+nodos no la usan.
 
 ## Convenciones del proyecto
 

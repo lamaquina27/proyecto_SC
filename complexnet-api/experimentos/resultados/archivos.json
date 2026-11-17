@@ -1,0 +1,132 @@
+{
+ "modo": "loopback",
+ "filas": [
+  {
+   "tamano": 100000,
+   "clase": "texto",
+   "compresion": "auto",
+   "comprimido": true,
+   "entregado": true,
+   "bytes_enviados": 466,
+   "segundos": 0.026,
+   "mb_por_s": 3.84
+  },
+  {
+   "tamano": 100000,
+   "clase": "texto",
+   "compresion": "no",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 100000,
+   "segundos": 0.0255,
+   "mb_por_s": 3.92
+  },
+  {
+   "tamano": 100000,
+   "clase": "aleatorio",
+   "compresion": "auto",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 100000,
+   "segundos": 0.0276,
+   "mb_por_s": 3.62
+  },
+  {
+   "tamano": 100000,
+   "clase": "aleatorio",
+   "compresion": "no",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 100000,
+   "segundos": 0.0346,
+   "mb_por_s": 2.89
+  },
+  {
+   "tamano": 1000000,
+   "clase": "texto",
+   "compresion": "auto",
+   "comprimido": true,
+   "entregado": true,
+   "bytes_enviados": 3519,
+   "segundos": 0.0411,
+   "mb_por_s": 24.3
+  },
+  {
+   "tamano": 1000000,
+   "clase": "texto",
+   "compresion": "no",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 1000000,
+   "segundos": 0.0492,
+   "mb_por_s": 20.34
+  },
+  {
+   "tamano": 1000000,
+   "clase": "aleatorio",
+   "compresion": "auto",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 1000000,
+   "segundos": 0.0788,
+   "mb_por_s": 12.7
+  },
+  {
+   "tamano": 1000000,
+   "clase": "aleatorio",
+   "compresion": "no",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 1000000,
+   "segundos": 0.0482,
+   "mb_por_s": 20.73
+  },
+  {
+   "tamano": 10000000,
+   "clase": "texto",
+   "compresion": "auto",
+   "comprimido": true,
+   "entregado": true,
+   "bytes_enviados": 34069,
+   "segundos": 0.1317,
+   "mb_por_s": 75.94
+  },
+  {
+   "tamano": 10000000,
+   "clase": "texto",
+   "compresion": "no",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 10000000,
+   "segundos": 0.3942,
+   "mb_por_s": 25.37
+  },
+  {
+   "tamano": 10000000,
+   "clase": "aleatorio",
+   "compresion": "auto",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 10000000,
+   "segundos": 0.3559,
+   "mb_por_s": 28.1
+  },
+  {
+   "tamano": 10000000,
+   "clase": "aleatorio",
+   "compresion": "no",
+   "comprimido": false,
+   "entregado": true,
+   "bytes_enviados": 10000000,
+   "segundos": 0.3391,
+   "mb_por_s": 29.49
+  }
+ ],
+ "entorno": {
+  "fecha": "2026-11-17T07:59:24",
+  "sistema": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "nucleos": 12,
+  "equipo": "JuanDeivy"
+ }
+}

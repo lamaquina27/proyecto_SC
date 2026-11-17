@@ -266,8 +266,9 @@ defecto (configurables con `Nodo(pesos={...})`). Tres detalles:
 3. **L incluye lo que ya le mandé.** El RESOURCE_UPDATE llega cada 5 s.
    Sin este ajuste, cuatro tareas lanzadas a la vez caerían en el mismo
    nodo porque todavía no publicó su carga nueva. Por eso
-   L = mín(1, carga publicada + tareas que le asigné y no han vuelto /
-   capacidad).
+   L = carga publicada + tareas que le asigné y no han vuelto / capacidad.
+   **L no tiene tope en 1**: un nodo con su cola llena tiene L > 1 y deja de
+   recibir más trabajo (decisión 28).
 
 El UML lista `pesoLatencia`, pero la fórmula del modelo matemático usa la
 carga L. Se siguió la fórmula, que es la que está sustentada.
@@ -455,3 +456,36 @@ HEARTBEAT no le llegaban a nadie. Se encontró probando en la red real, y
 descarta `0.0.0.0` y calcula la difusión con la IP y la máscara de la
 interfaz (`10.10.0.3/24` → `10.10.0.255`). Así se sigue cumpliendo la
 decisión 1 aunque alguien configure `bat0` a mano.
+
+## Correcciones que salieron de las mediciones
+
+Las dos siguientes se encontraron midiendo (ver `informe_experimental.md`,
+sección 8), no con las pruebas automáticas.
+
+### 28. La carga L no tiene tope
+
+Antes era L = mín(1, carga + pendientes / capacidad). Con el tope, cuando
+todos los nodos tenían sus 2 tareas en curso, todos quedaban con L = 1 y la
+fórmula ya no distinguía entre un nodo con 2 tareas en fila y uno con 18.
+Además, la confiabilidad se retroalimentaba: el nodo que terminaba tareas
+subía su R, recibía más tareas, terminaba más... Al repartir 32 tareas entre
+8 nodos, el reparto fue `[2, 2, 2, 2, 2, 2, 2, 18]`.
+
+Sin el tope, cada tarea que ya está en la fila de un nodo le resta
+1 / capacidad a su puntaje, y el trabajo se reparte solo. El reparto pasó a
+ser `[4, 4, 4, 4, 4, 4, 4, 4]`, y 8 nodos pasaron de ser 2,6 veces más
+rápidos que uno a 7 veces. L no forma parte del vector de estado S_i, que sí
+sigue entre 0 y 1: es una medida de cola, y una cola puede ser más larga que
+la capacidad.
+
+*Para la sustentación:* "Es un efecto típico de los sistemas complejos: una
+retroalimentación positiva ('el rico se hace más rico') concentraba el
+trabajo. La carga sin tope es la retroalimentación negativa que la
+equilibra."
+
+### 29. Un nodo se despide antes de cerrar sus servicios
+
+`Nodo.detener()` cerraba primero el gestor de tareas (hasta medio segundo)
+y después mandaba el GOODBYE: los demás se enteraban 460 ms tarde. Ahora se
+despide primero: los demás lo saben en menos de 1 ms y reasignan antes las
+tareas que tenía.

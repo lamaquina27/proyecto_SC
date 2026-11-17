@@ -1,0 +1,79 @@
+{
+ "modo": "loopback",
+ "t_hello": 5.0,
+ "ventana_s": 20.0,
+ "filas": [
+  {
+   "nodos": 3,
+   "convergio": true,
+   "inicio_de_todos_s": 0.012,
+   "convergencia_s": 0.05,
+   "arranque_recibidos_por_nodo": 27.7,
+   "teoria_arranque_por_nodo": 30,
+   "recibidos_por_nodo_s": 0.8,
+   "enviados_por_nodo_s": 0.4,
+   "kb_recibidos_por_nodo_s": 0.35,
+   "teoria_recibidos_por_nodo_s": 0.8,
+   "mensajes_red_s": 2.4
+  },
+  {
+   "nodos": 5,
+   "convergio": true,
+   "inicio_de_todos_s": 0.019,
+   "convergencia_s": 0.051,
+   "arranque_recibidos_por_nodo": 94.4,
+   "teoria_arranque_por_nodo": 108,
+   "recibidos_por_nodo_s": 1.6,
+   "enviados_por_nodo_s": 0.4,
+   "kb_recibidos_por_nodo_s": 0.58,
+   "teoria_recibidos_por_nodo_s": 1.6,
+   "mensajes_red_s": 8.0
+  },
+  {
+   "nodos": 10,
+   "convergio": true,
+   "inicio_de_todos_s": 0.06,
+   "convergencia_s": 0.05,
+   "arranque_recibidos_por_nodo": 428.2,
+   "teoria_arranque_por_nodo": 513,
+   "recibidos_por_nodo_s": 3.6,
+   "enviados_por_nodo_s": 0.4,
+   "kb_recibidos_por_nodo_s": 1.15,
+   "teoria_recibidos_por_nodo_s": 3.6,
+   "mensajes_red_s": 36.0
+  },
+  {
+   "nodos": 20,
+   "convergio": true,
+   "inicio_de_todos_s": 0.245,
+   "convergencia_s": 0.311,
+   "arranque_recibidos_por_nodo": 966.8,
+   "teoria_arranque_por_nodo": 2223,
+   "recibidos_por_nodo_s": 7.6,
+   "enviados_por_nodo_s": 0.4,
+   "kb_recibidos_por_nodo_s": 2.32,
+   "teoria_recibidos_por_nodo_s": 7.6,
+   "mensajes_red_s": 152.0
+  },
+  {
+   "nodos": 30,
+   "convergio": true,
+   "inicio_de_todos_s": 0.588,
+   "convergencia_s": 1.641,
+   "arranque_recibidos_por_nodo": 779.1,
+   "teoria_arranque_por_nodo": 5133,
+   "recibidos_por_nodo_s": 11.6,
+   "enviados_por_nodo_s": 0.4,
+   "kb_recibidos_por_nodo_s": 3.48,
+   "teoria_recibidos_por_nodo_s": 11.6,
+   "mensajes_red_s": 348.0
+  }
+ ],
+ "entorno": {
+  "fecha": "2026-11-17T08:04:26",
+  "sistema": "Windows-10-10.0.26200-SP0",
+  "python": "3.11.9",
+  "nucleos": 12,
+  "equipo": "JuanDeivy"
+ }
+}

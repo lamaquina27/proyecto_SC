@@ -62,7 +62,7 @@ class PlanificadorDistribuido:
             "B": _acotar(e.get("ancho_banda", NEUTRO)),
             "R": min(publicada, self.reputacion(vecino.node_id)),
             "A": _acotar(e.get("disponibilidad", 1.0)),
-            "L": min(1.0, carga + self.pendientes(vecino.node_id) / capacidad),
+            "L": carga + self.pendientes(vecino.node_id) / capacidad,
         }
 
     def calcular_aptitud(self, vecino):
