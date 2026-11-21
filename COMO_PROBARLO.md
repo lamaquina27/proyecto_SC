@@ -297,6 +297,50 @@ restablece sola, sin que nadie configure nada.
 
 ---
 
+## Guion y Estructura Recomendada para el Video de Sustentación
+
+Para que el profesor entienda claramente el proyecto, el video no debe ser solo una muestra de comandos, sino una **demostración guiada con justificación teórica y técnica**:
+
+### Parte 1: Introducción y Modelo de Sistemas Complejos (2 a 3 min)
+* **El Problema:** Explicar el escenario de desastre natural donde colapsan antenas celulares, fibra óptica y energía.
+* **Comportamiento Emergente:** Explicar que la red no tiene un "jefe" ni servidor central; cada nodo ejecuta reglas locales sencillas y, de su interacción mutua, emerge una red mallada coordinada y resiliente.
+* **Modelo Matemático:**
+  * Grafo dinámico $G(t) = (V(t), E(t))$.
+  * Vector de estado $S_i(t) = [C_i, M_i, B_i, R_i, A_i]$.
+  * Planificador distribuido $F(i, j) = w_1 C_i + w_2 M_i + w_3 B_i + w_4 R_i - w_5 L_i$.
+
+### Parte 2: Despliegue de la Malla y Descubrimiento (3 min)
+* Mostrar en terminal `batctl originators`: señalar que los nodos se ven aunque estén a varios saltos.
+* Iniciar `applications/mensajeria.py`: mostrar cómo se descubren solos por UDP broadcast sin tocar ningún router.
+* Mostrar `todos <mensaje>` (broadcast) y `msg <nodo> <mensaje>` (TCP directo).
+* Mostrar multicast: `unir rescate` en dos nodos y `grupo rescate <alerta>`, demostrando que solo los suscritos procesan el mensaje.
+
+### Parte 3: Hardware de Borde (ESP32) e Inteligencia Artificial CART (3 a 4 min)
+* **La Baliza ESP32:** Mostrar en cámara la placa ESP32 con sus sensores:
+  * DHT11 (temperatura y humedad de aire).
+  * Sensor capacitivo v2 (humedad de suelo calibrado por ADC).
+  * GY-302 BH1750 (iluminación en Lux por I2C).
+* **Lectura en Vivo:** Ejecutar `sensor` en la consola para ver los datos reales.
+* **Evaluación con IA Distribuida:** Ejecutar `evaluar`. Señalar en pantalla que la telemetría se envió a la red y el nodo óptimo la diagnosticó.
+* **Justificación de la IA ante el Profesor:**
+  * *¿Por qué un Árbol de Decisión CART?* Explicar los tres pilares:
+    1. **Explicabilidad (XAI):** En rescate humano, un modelo interpretable permite auditar las reglas exactas (p. ej. oscuridad profunda $\le 2.75\text{ lux}$ y suelo seco indican colapso estructural / personas atrapadas).
+    2. **Ejecución Ligera en RAM (`toram`):** Corre en Python puro nativo sin librerías pesadas (`scikit-learn` o `torch`), ideal para USBs en RAM sin internet.
+    3. **Inferencia Instantánea:** Diagnóstico en $< 0.2\text{ ms}$.
+* **Simulación de Emergencias:** Ejecutar `simular incendio` y `evaluar`, luego `simular escombros` y `evaluar`.
+* **Vigilancia Continua:** Ejecutar `vigilancia 3` y mostrar cómo en la pantalla de `applications/monitor.py` saltan las alertas perimetrales en color rojo.
+
+### Parte 4: Cómputo Colaborativo y Tolerancia a Fallos (3 min)
+* Ejecutar `calc (10 + 20) * 2`: mostrar que la resuelve el nodo con mayor $F(i,j)$ y retorna el resultado por TCP.
+* Ejecutar `estres 20 2`: mostrar en el monitor cómo el planificador reparte los subprocesos entre los nodos disponibles.
+* **La Prueba Reina (Tolerancia a Fallos en Vivo):** Lanzar una tarea o prueba de estrés y apagar de golpe uno de los nodos ejecutores. Mostrar cómo el `GestorRecuperacion` detecta la caída y reasigna automáticamente la tarea al segundo mejor nodo sin intervención humana.
+
+### Parte 5: Conclusiones y Trazabilidad (1 min)
+* Mostrar brevemente la carpeta `logs/*.jsonl` y ejecutar `python3 examples/analizar_logs.py logs`.
+* Resaltar que todos los eventos tienen sello temporal de Lamport para mantener causalidad sin necesidad de reloj NTP sincronizado.
+
+---
+
 ## Checklist para el video
 
 | Qué mostrar | Cómo se ve que funcionó |

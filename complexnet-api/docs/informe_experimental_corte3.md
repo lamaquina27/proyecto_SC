@@ -42,11 +42,11 @@ El planificador distribuido resuelve un problema de optimización multi-criterio
 $$F(i, j) = w_1 \cdot C_i + w_2 \cdot M_i + w_3 \cdot B_i + w_4 \cdot R_i - w_5 \cdot L_i$$
 
 Donde las variables corresponden al vector de estado normalizado $[0, 1]$ publicado periódicamente por cada nodo:
-* **$C_i$ (Capacidad de CPU disponible):** $1.0 - \text{uso\_cpu}$.
-* **$M_i$ (Memoria RAM disponible):** $\text{mem\_libre} / \text{mem\_total}$.
+* **$C_i$ (Capacidad de CPU disponible):** $1.0 - \text{carga}$.
+* **$M_i$ (Memoria RAM disponible):** $\text{RAM}_{\text{libre}} / \text{RAM}_{\text{total}}$.
 * **$B_i$ (Calidad de Enlace de Red):** Obtenida directamente de la métrica $TQ$ (Transmit Quality) provista por el protocolo B.A.T.M.A.N. Advanced: $B_i = TQ / 255.0$.
 * **$R_i$ (Reputación Histórica):** Proporción de tareas completadas exitosamente sin errores ni abandonos: $R_i = \min(R_{\text{publicado}}, R_{\text{observado}})$.
-* **$L_i$ (Carga de Tareas en Curso):** Penalización por saturación concurrente: $L_i = \min(1.0, \text{tareas\_activas} \times 0.25)$.
+* **$L_i$ (Carga de Tareas en Curso):** Penalización por saturación concurrente: $L_i = \min(1.0, \text{tareas} \times 0.25)$.
 
 ### Configuración de Pesos para Clasificación de Emergencias:
 Para tareas de Inteligencia Artificial (latencia crítica y sensibilidad a la conectividad de campo):
@@ -54,7 +54,7 @@ $$\{w_1 = 0.25,\; w_2 = 0.15,\; w_3 = 0.35,\; w_4 = 0.15,\; w_5 = 0.10\}$$
 
 Se prioriza la calidad del enlace inalámbrico ($B_i$) para minimizar la pérdida de paquetes en el borde del desastre, complementado con disponibilidad de CPU ($C_i$). El nodo ejecutor final se elige por:
 
-$$i^* = \arg\max_{i \in V_{\text{capaces}}} F(i, j)$$
+$$i^* = \arg\max_{i \in V} F(i, j)$$
 
 ---
 
@@ -127,7 +127,7 @@ $$I_G(p) = 1 - \sum_{i=1}^{K} p_i^2$$
 |---|:---:|:---:|:---:|
 | **Interpretabilidad (XAI)** | **Total:** Reglas lógicas auditables | Opaca ("Caja negra") | Baja (Depende de kernels) |
 | **Dependencias en RAM (`toram`)** | **0 dependencias** (Python puro) | Requiere PyTorch / TF (~500 MB) | Requiere Scikit-Learn (~150 MB) |
-| **Tiempo de Inferencia** | **$< 0.2\text{ ms}$** | $15 - 50\text{ ms}$ | $5 - 12\text{ ms}$ |
+| **Tiempo de Inferencia** | **< 0.2 ms** | 15 - 50 ms | 5 - 12 ms |
 | **Resistencia a Ruido Sensorial** | Alta (Particiones ortogonales) | Media | Sensible a outliers |
 
 ### B. Métricas Globales de Rendimiento
@@ -136,8 +136,8 @@ El modelo fue validado contra un conjunto de prueba independiente de 400 muestra
 
 * **Muestras Totales de Prueba:** 400
 * **Predicciones Correctas:** 390
-* **Exactitud Global (Accuracy):** **$97.50\%$**
-* **Tiempo Promedio de Inferencia:** **$0.14\text{ ms}$ por lectura**
+* **Exactitud Global (Accuracy):** **97.50%**
+* **Tiempo Promedio de Inferencia:** **0.14 ms por lectura**
 
 ### C. Matriz de Confusión
 

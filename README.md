@@ -56,16 +56,16 @@ El sistema modela la red como un **sistema complejo autoorganizado, robusto y ad
 2. **Vector de Estado de los Nodos:**
    Cada nodo $v_i$ publica periódicamente su vector de recursos normalizado $[0, 1]$:
    $$S_i(t) = [C_i(t), M_i(t), B_i(t), R_i(t), A_i(t)]$$
-   * $C_i$: Capacidad de CPU disponible ($1.0 - \text{uso\_cpu}$).
-   * $M_i$: Memoria RAM disponible ($\text{mem\_libre} / \text{mem\_total}$).
-   * $B_i$: Calidad del enlace de red (métrica $TQ/255$ provista por B.A.T.M.A.N. Advanced).
-   * $R_i$: Nivel de reputación / confiabilidad histórica de tareas exitosas.
-   * $A_i$: Disponibilidad del nodo ($A_i < 0.2$ filtra nodos que no pueden recibir tareas).
+   * **$C_i$**: Capacidad de CPU disponible ($1.0 - \text{carga}$).
+   * **$M_i$**: Memoria RAM disponible ($\text{RAM}_{\text{libre}} / \text{RAM}_{\text{total}}$).
+   * **$B_i$**: Calidad del enlace de red (métrica $TQ / 255$ provista por B.A.T.M.A.N. Advanced).
+   * **$R_i$**: Nivel de reputación y confiabilidad histórica de tareas exitosas.
+   * **$A_i$**: Disponibilidad del nodo ($A_i < 0.2$ filtra nodos sobrecargados).
 
 3. **Planificador Distribuido (Función de Aptitud):**
    Para cada tarea $T_j$, el nodo solicitante selecciona al mejor ejecutor maximizando:
    $$F(i, j) = w_1 C_i + w_2 M_i + w_3 B_i + w_4 R_i - w_5 L_i$$
-   $$i^* = \arg\max_{i \in V_{\text{capaces}}} F(i, j)$$
+   $$i^* = \arg\max_{i \in V} F(i, j)$$
    Donde $L_i$ representa la carga actual de tareas asignadas al nodo $i$.
 
 ---
@@ -82,7 +82,7 @@ El sistema modela la red como un **sistema complejo autoorganizado, robusto y ad
 ### Detalle de la Aplicación de Inteligencia Artificial (CART)
 
 * **Fundamento Matemático (Impureza de Gini):**
-  El clasificador particiona recursivamente las variables sensoriales $(\text{temperatura}, \text{humedad\_aire}, \text{suelo}, \text{luz})$ optimizando la reducción de impureza:
+  El clasificador particiona recursivamente el vector de características sensoriales `(temperatura, humedad_aire, suelo, luz)` optimizando la reducción de impureza en cada división:
   $$I_G(S) = 1 - \sum_{k=1}^{C} p_k^2$$
   $$\Delta I_G(S, f, \theta) = I_G(S) - \left( \frac{|S_L|}{|S|} I_G(S_L) + \frac{|S_R|}{|S|} I_G(S_R) \right)$$
 
@@ -92,14 +92,14 @@ El sistema modela la red como un **sistema complejo autoorganizado, robusto y ad
 |---|:---:|:---:|:---:|
 | **Explicabilidad (XAI)** | **Total:** Reglas lógicas transparentes y auditables | Nula ("Caja negra") | Baja (Depende de transformaciones) |
 | **Entorno Efímero en RAM (`toram`)** | **0 dependencias pesadas:** Python puro nativo | Requiere PyTorch / TF (~500 MB) | Requiere Scikit-Learn (~150 MB) |
-| **Tiempo de Inferencia** | **$< 0.2\text{ ms}$** (Ultrarrápido) | $15 - 50\text{ ms}$ | $5 - 15\text{ ms}$ |
+| **Tiempo de Inferencia** | **< 0.2 ms** (Ultrarrápido) | 15 - 50 ms | 5 - 15 ms |
 | **Tolerancia a Sensores Parciales** | Alta (Particiones ortogonales) | Media | Sensible a escala y normalización |
 
-> **Justificación en Rescate:** En una misión de rescate humano, las decisiones deben ser auditables. Un brigadista puede inspeccionar la regla exacta que activó `POSIBLE_ATRAPADO_ESCOMBROS` (luz $\le 2.75\text{ lux}$ y suelo seco) en lugar de depender de pesos opacos de una red neuronal.
+> **Justificación en Rescate:** En una misión de rescate humano, las decisiones deben ser auditables. Un brigadista o perito puede inspeccionar la regla exacta que activó `POSIBLE_ATRAPADO_ESCOMBROS` (luz $\le 2.75$ lux y suelo seco) en lugar de depender de pesos opacos de una red neuronal.
 
 * **Métricas Obtenidas en Validación:**
-  * **Exactitud Global (Accuracy):** **$97.5\%$**
-  * **F1-Scores por Categoría:** Normal ($0.931$), Incendio ($1.000$), Inundación ($0.987$), Escombros ($0.964$), Calor ($0.993$).
+  * **Exactitud Global (Accuracy):** **97.5%** (390 aciertos sobre 400 muestras de prueba).
+  * **F1-Scores por Categoría:** Normal (0.931), Incendio (1.000), Inundación (0.987), Escombros (0.964), Calor (0.993).
 
 ---
 
