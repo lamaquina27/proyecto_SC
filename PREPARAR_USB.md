@@ -44,21 +44,18 @@ desde la USB. Los registros se guardan al final (paso 12).
 
 ### 3. Los paquetes que Ubuntu en vivo no trae
 
-Ubuntu en vivo no trae `batctl`, y sin internet no se puede instalar allá. Ya
-están descargados en la carpeta `paquetes/` del proyecto:
+Ubuntu en vivo no trae `batctl` ni `python3-serial`, y sin internet en el laboratorio no se pueden descargar allá. Ya están descargados en la carpeta `paquetes/` del proyecto:
 
 ```
-batctl, iw, libnl-3-200, libnl-genl-3-200, python3-psutil   (Ubuntu 24.04, amd64)
+batctl, iw, libnl-3-200, libnl-genl-3-200, python3-psutil, python3-serial   (Ubuntu 24.04)
 ```
 
-Esa carpeta no se sube a GitHub. Si la necesita tu compañero, o si la
-borraste, se vuelve a bajar desde WSL:
+Esa carpeta no se sube a GitHub para no inflar el repositorio con binarios. Si se necesita volver a descargar:
 
 ```bash
-cd /mnt/d/jdsan/Desktop/visual/proyecto_SC
 mkdir -p paquetes && cd paquetes
 sudo apt update
-apt download batctl iw libnl-3-200 libnl-genl-3-200 python3-psutil
+apt download batctl iw libnl-3-200 libnl-genl-3-200 python3-psutil python3-serial
 ```
 
 ### 4. Copiar el proyecto a la USB
@@ -136,19 +133,29 @@ Si te equivocas escribiendo, presiona Esc y vuelve a presionar `e`.
    instalador.
 2. **No te conectes a ninguna red Wi-Fi.** La tarjeta la va a usar la malla.
 
-### 9. Correr el script
+### 9. Correr el script de arranque
 
-1. Abre **Archivos** (el ícono de la carpeta) y haz clic en **COMPLEXNET** en
-   la columna izquierda. Eso "monta" la USB.
-2. Abre una terminal con **Ctrl + Alt + T** y escribe (cambia el `1` por el
-   número de este nodo):
+1. Abre una terminal con **Ctrl + Alt + T**.
+2. **Identificar la ruta de la USB:**
+   En Ubuntu Live con `toram`, la partición de la USB puede encontrarse en dos rutas posibles según el gestor de arranque:
+   * **Ruta directa del medio Live (habitual):**
+     ```bash
+     ls /cdrom/complexnet/arrancar_nodo.sh
+     ```
+   * **Ruta montada por el entorno gráfico (si abriste Archivos y diste clic en COMPLEXNET):**
+     ```bash
+     ls /media/ubuntu/*/complexnet/arrancar_nodo.sh
+     ```
+3. **Ejecutar el script:**
+   Si la USB está en `/cdrom`:
+   ```bash
+   sudo bash /cdrom/complexnet/arrancar_nodo.sh 1
+   ```
+   O si está en `/media/ubuntu/...`:
    ```bash
    sudo bash /media/ubuntu/COMPLEXNET/complexnet/arrancar_nodo.sh 1
    ```
-   Para que este nodo entre de una vez a un grupo:
-   ```bash
-   sudo bash /media/ubuntu/COMPLEXNET/complexnet/arrancar_nodo.sh 1 --grupos rescate
-   ```
+   *(Cambia `1` por `2` o `3` según el equipo. Para que un nodo ingrese directamente suscrito al grupo de rescate, agrega `--grupos rescate` al final).*
 
 El script hace todo solo, y en cada paso dice qué está haciendo:
 

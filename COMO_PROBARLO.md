@@ -1,233 +1,152 @@
-# Cómo comprobar que funciona
+# Guía Práctica de Pruebas y Validación — COMPLEXNET
 
-Hay tres cosas distintas que comprobar, y conviene no confundirlas:
-
-1. **Que la malla existe.** Eso lo hace batman-adv, no nuestro código.
-2. **Que nuestro código habla por la malla.** Esto sí es nuestro.
-3. **Que los mensajes de verdad están viajando.** La prueba que no se puede
-   falsear.
+Esta guía describe el procedimiento paso a paso para comprobar el funcionamiento de COMPLEXNET, tanto en un solo computador (modo local) como en varios computadores conectados mediante la red inalámbrica ad hoc con hardware ESP32.
 
 ---
 
-## Nivel 1 — Que la malla existe
+## 1. Opciones de Ejecución: Local vs Red Real
 
-Antes de correr una sola línea de Python, la malla tiene que estar montada.
-En cada equipo:
+Antes de iniciar, elige el entorno de prueba:
 
-```bash
-sudo ./setup_adhoc.sh 1        # en el segundo: 2, en el tercero: 3
-```
-
-Y después estas cuatro comprobaciones:
-
-```bash
-ip -brief addr show bat0      # debe mostrar bat0 con su IP, por ejemplo 10.10.0.1
-batctl neighbors              # los vecinos que este equipo escucha directamente
-batctl originators            # TODOS los nodos alcanzables, con su siguiente salto
-ping -c 3 10.10.0.3           # llegar hasta el nodo más lejano
-```
-
-**La diferencia entre las dos tablas es lo importante.** `neighbors` muestra
-solo a quien se escucha directamente. `originators` muestra a todos, incluso
-los que están a tres saltos, cada uno con su métrica TQ y su siguiente salto.
-Ningún nodo conoce la ruta completa: solo sabe "para llegar allá, pásaselo a
-este". Eso es lo que hay que señalar en la sustentación cuando se hable de
-comportamiento emergente.
-
-Para ver el camino salto a salto:
-
-```bash
-batctl traceroute $(ssh nodo3 cat /sys/class/net/bat0/address)
-```
+* **Modo Local (Recomendado para desarrollo rápido):**
+  Se ejecuta en un solo computador (Windows, Linux o macOS) abriendo varias terminales con la opción `--local`. No requiere tarjeta Wi-Fi en modo ad hoc ni permisos de superusuario.
+* **Modo Red en Malla (Hardware real en laboratorio):**
+  Se ejecuta en 2 o más computadores con Linux, configurados con `setup_adhoc.sh` o arrancados desde la memoria USB en vivo con `toram`.
 
 ---
 
-## Nivel 2 — Que nuestro código habla por la malla
+## 2. Fase 1 — Comprobación de la Red en Malla (Solo modo real)
 
-**Lo más rápido es la aplicación de mensajería**, que lo arranca todo con un
-solo comando. En cada equipo, desde `complexnet-api/`:
+Si estás probando en computadores físicos con Linux y B.A.T.M.A.N. Advanced:
 
-```bash
-python3 applications/mensajeria.py
-```
-
-Sin malla, en un solo computador, abra tres terminales y en cada una:
-
-```bash
-python3 applications/mensajeria.py --local
-```
-
-Tiene los mismos comandos que los demos (`lista`, `todos`, `msg`, `grupo`,
-`unir`, `ping`, `stats`) y además deja el registro en `logs/`. Los demos de
-abajo siguen sirviendo para mostrar cada capa por separado.
-
-En cada equipo:
-
-```bash
-python3 examples/demo_descubrimiento.py nodo-01
-```
-
-A los pocos segundos cada nodo empieza a imprimir su tabla de vecinos. Esto
-es una salida real con dos nodos:
-
-```
-nodo-01 (ca4eaaeb) en lo
-  ip: 10.10.0.1   difusión: 10.10.0.255
-
-  >> entró nodo-02 en 10.10.0.2
-
-[nodo-01] conozco 1 nodo(s)
-   nombre      estado      ip              cpu    mem    visto   servicios
-   nodo-02     ACTIVO      10.10.0.2       1.0    0.939  2.7s    sensor_movimiento
-```
-
-Y el de mensajería, que es interactivo:
-
-```bash
-python3 examples/demo_comunicacion.py nodo-01
-```
-
-Sesión real, con los comandos escritos y lo que responde:
-
-```
-nodo-01 (8e539057) escuchando en lo
-  ip: 10.10.0.1   difusión: 10.10.0.255
-  puertos: UDP 5000 · TCP 5001
-
-  >> apareció nodo-02 en 10.10.0.2
-
-lista
-  nodo-02      10.10.0.2        visto hace 4.7 s
-
-todos hola a toda la malla
-  enviado a toda la malla
-
-msg nodo-02 esto va directo por TCP
-  enviado a nodo-02
-
-ping nodo-02
-  >> respuesta de nodo-02: 3.5 ms
-
-stats
-  enviados: 7
-  recibidos: 4
-  descartados: 0
-  bytes_enviados: 1243
-  bytes_recibidos: 1593
-  fallos_envio: 0
-```
-
-Al mismo tiempo, en la terminal del otro equipo:
-
-```
-  >> apareció nodo-01 en 10.10.0.1
-  >> nodo-01 (a todos): hola a toda la malla
-  >> nodo-01 (directo): esto va directo por TCP
-```
-
-Fíjese que el mensaje dice **a todos** o **directo** según por dónde llegó.
-El primero viajó por UDP en difusión y el segundo por TCP punto a punto.
-
-### Multicast: mandar solo a un grupo
-
-En nodo-02 escriba `unir rescate`. En nodo-03 no escriba nada. Después, en
-nodo-01:
-
-```
-grupo rescate hay heridos en la zona norte
-  enviado al grupo rescate
-```
-
-En nodo-02 aparece `>> nodo-01 (grupo rescate): hay heridos...`. En nodo-03
-no aparece nada, y en su `stats` sube `descartados`: el datagrama sí le
-llegó, pero lo descartó porque no es del grupo. Eso es lo que hay que
-explicar: es una sola difusión y cada nodo filtra.
-
-### Si varios nodos corren en el mismo equipo
-
-Hay que darles puertos TCP distintos, porque no pueden compartirlo:
-
-```bash
-python3 examples/demo_comunicacion.py nodo-01 lo 127.255.255.255 5001
-python3 examples/demo_comunicacion.py nodo-02 lo 127.255.255.255 5002
-python3 examples/demo_comunicacion.py nodo-03 lo 127.255.255.255 5003
-```
-
-En equipos distintos no hace falta: cada uno usa el 5001.
+1. **Levantar la interfaz ad hoc en cada equipo:**
+   ```bash
+   sudo ./setup_adhoc.sh 1    # En el equipo 1 (IP 10.10.0.1)
+   sudo ./setup_adhoc.sh 2    # En el equipo 2 (IP 10.10.0.2)
+   ```
+2. **Verificar que la interfaz virtual `bat0` existe:**
+   ```bash
+   ip -brief addr show bat0
+   ```
+   *Resultado esperado:* Debe mostrar `bat0 UP 10.10.0.X/24`.
+3. **Verificar vecinos alcanzables directamente:**
+   ```bash
+   batctl meshif bat0 neighbors
+   ```
+   *Resultado esperado:* Debe listar las direcciones MAC de los equipos vecinos al alcance de radio directo.
+4. **Verificar la tabla de originadores (rutas de la malla):**
+   ```bash
+   batctl meshif bat0 originators
+   ```
+   *Resultado esperado:* Lista todos los nodos de la red, indicando el siguiente salto y la métrica de calidad de enlace $TQ$ (idealmente 255/255).
+5. **Comprobar conectividad IP básica:**
+   ```bash
+   ping -c 3 10.10.0.2
+   ```
 
 ---
 
-## Nivel 3 — Ver los mensajes viajando
+## 3. Fase 2 — Inicio de Nodos y Descubrimiento Automático
 
-Esta es la comprobación que no se puede fingir. En un equipo, mientras los
-otros hablan:
+### En modo local:
+Abre tres terminales independientes dentro de la carpeta `complexnet-api/`:
 
+* **Terminal 1 (Monitor de supervisión):**
+  ```bash
+  python applications/monitor.py --local
+  ```
+* **Terminal 2 (Nodo 1 — Baliza sensorial):**
+  ```bash
+  python applications/mensajeria.py --local --nombre nodo-01
+  ```
+* **Terminal 3 (Nodo 2 — Brigada de rescate):**
+  ```bash
+  python applications/mensajeria.py --local --nombre nodo-02
+  ```
+
+### En modo red real (laboratorio):
+En cada computador, ejecuta simplemente:
 ```bash
-sudo tcpdump -i bat0 -A -n udp port 5000
+sudo python3 applications/mensajeria.py
 ```
+*(Y opcionalmente en una terminal secundaria: `python3 applications/monitor.py`)*
 
-Los mensajes salen en texto plano, porque van en JSON. Uno real se ve así:
-
-```json
-{"message_id":"b971b455","type":"HEARTBEAT","sender":"a3f1c9d2",
- "receiver":null,"group":null,"timestamp":1790787256.94,"seq":87,
- "lamport":312,"payload":{"nombre":"nodo-01","puerto_tcp":5001,
- "servicios":["sensor_movimiento"],"grupos":["rescate"]}}
-
-{"message_id":"c08a11f2","type":"RESOURCE_UPDATE","sender":"a3f1c9d2",
- "receiver":null,"group":null,"timestamp":1790787256.95,"seq":88,
- "lamport":313,"payload":{"nombre":"nodo-01","puerto_tcp":5001,
- "estado":{"cpu":0.72,"memoria":0.55,"ancho_banda":0.81,"carga":0.25}}}
+### Resultado esperado:
+En cuestión de 2 a 5 segundos, cada consola mostrará:
 ```
-
-Son los dos mensajes de la tabla de tipos del corte 1. El HEARTBEAT dice
-"sigo vivo" y qué sabe hacer el nodo; el RESOURCE_UPDATE lleva el vector de
-estado. Ahí se ve todo de un vistazo: el tipo, quién lo mandó, el contador de
-secuencia y el reloj de Lamport. `receiver` en `null` significa que va para
-todos, y `group` es el grupo en un multicast.
-
-Si apaga un nodo de golpe, a los 15 s verá pasar un `NODE_STATUS` de cada
-vecino, con `"status":"SOSPECHOSO"`, y otro a los 30 s con `"INACTIVO"`.
-
-Para los mensajes directos:
-
-```bash
-sudo tcpdump -i bat0 -A -n tcp port 5001
+>> entró nodo-02 en 10.10.0.2
 ```
-
-Para verlo con interfaz gráfica, Wireshark sobre `bat0` con el filtro
-`udp.port == 5000 || tcp.port == 5001`. Eso queda muy bien en el video.
+Escribe `lista` en cualquier terminal para ver la tabla de vecinos activos y sus tiempos de último contacto.
 
 ---
 
-## Nivel 4 — Telemetría ESP32 e Inferencia Distribuida de IA (Fase 3)
+## 4. Fase 3 — Lectura de Sensores Físicos (ESP32-S3)
 
-Esta sección comprueba la integración de hardware de borde (ESP32) y la clasificación de emergencias con Inteligencia Artificial explicable (Árbol de Decisión CART).
+1. Conecta la placa ESP32 mediante cable USB al computador donde corre `nodo-01`.
+2. En la consola interactiva de `nodo-01`, escribe:
+   ```
+   sensor
+   ```
+3. **Salida esperada (con sensor físico conectado):**
+   ```
+   [Telemetria: esp32 (COM3 o /dev/ttyUSB0)]
+     Temperatura:        24.2 °C
+     Humedad del aire:   56.0 %
+     Humedad de suelo:   14.2 %  (ADC: 3540 - Seco / Aire)
+     Intensidad de luz:  185.0 lux
+   ```
+4. **Prueba de respuesta sensorial:**
+   * **Luz:** Cubre el sensor BH1750 con la mano; al escribir `sensor` el valor caerá a `0.0 lux`. Alumbra con la linterna del teléfono y subirá a más de `2000.0 lux`.
+   * **Suelo:** Con el sensor en seco reportará ~`3900` ADC (0-15%). Al introducirlo en un vaso con agua o tierra húmeda, el valor caerá hacia `1400-1800` ADC y el porcentaje subirá hacia 80-100%.
 
-### 1. Conexión y lectura del sensor físico
-Conecte la ESP32 por USB al computador donde corre el nodo sensor. En la consola de `mensajeria.py`:
+> Si no tienes la placa conectada, el sistema indicará `[Telemetria: simulada]` y entregará lecturas sintéticas estables.
+
+---
+
+## 5. Fase 4 — Simulación de Escenarios de Emergencia
+
+Para verificar el comportamiento del sistema ante condiciones de peligro sin exponer los sensores físicos a fuego o inundaciones reales, se utiliza el comando `simular`:
 
 ```
+simular incendio
 sensor
 ```
-* **Salida esperada (con sensor físico conectado):**
-  ```
-  [Telemetria: esp32 (COM3 / /dev/ttyUSB0)]
-    Temperatura:        24.2 °C
-    Humedad del aire:   56.0 %
-    Humedad de suelo:   14.2 %  (ADC: 3540 - Seco / Aire)
-    Intensidad de luz:  185.0 lux
-  ```
-* Si la ESP32 no está conectada, el sistema entra en modo de **telemetría simulada** automáticamente para que las pruebas nunca se detengan.
+*Salida:* Temperatura elevada (>45 °C) y humedad de aire extremadamente baja (<20%).
 
-### 2. Inferencia distribuida de IA (`evaluar`)
-Escriba en cualquier nodo:
 ```
-evaluar
+simular escombros
+sensor
 ```
-1. El nodo toma la lectura actual (física o simulada).
-2. El planificador $F(i,j)$ elige al mejor nodo de la malla que ofrezca `clasificar_urgencia`.
-3. El resultado vuelve por TCP en sub-milisegundos:
+*Salida:* Iluminación nula (0.0 a 1.5 lux) con suelo y temperatura normales.
+
+```
+simular inundacion
+sensor
+```
+*Salida:* Suelo saturado (>90%) con humedad atmosférica alta.
+
+```
+simular normal
+sensor
+```
+*Salida:* Restablece condiciones ambientales templadas estándar.
+
+---
+
+## 6. Fase 5 — Inferencia Distribuida con Inteligencia Artificial
+
+Para que la red clasifique el estado ambiental mediante el Árbol de Decisión CART:
+
+1. Escribe en la consola:
+   ```
+   evaluar
+   ```
+2. **Proceso interno:**
+   * El nodo emisor empaqueta su telemetría actual.
+   * El planificador evalúa la función de aptitud $F(i, j)$ sobre todos los nodos vecinos que ofrecen el servicio `clasificar_urgencia`.
+   * Envía la petición por TCP al nodo seleccionado.
+   * El nodo ejecutor procesa las reglas del árbol en sub-microsegundos y devuelve la respuesta.
+3. **Salida esperada en condiciones normales:**
    ```
    ================ DIAGNOSTICO DE EMERGENCIA (IA) ================
    Clasificacion:       NORMAL_ESTABLE (91.3% confianza)
@@ -235,173 +154,123 @@ evaluar
    Nodo Evaluador:      ea6fad2e (intentos: ea6fad2e)
    ================================================================
    ```
-
-### 3. Simulación de escenarios de desastre
-Para demostrar que el árbol de decisión clasifica correctamente las 5 categorías:
-```
-simular incendio
-evaluar
-```
-* Responderá: `ALERTA_INCENDIO (100.0% confianza)` — *¡Alerta crítica de fuego! Activar brigadas de extinción.*
-
-```
-simular escombros
-evaluar
-```
-* Responderá: `POSIBLE_ATRAPADO_ESCOMBROS (100.0% confianza)` — *Posible colapso estructural. Despachar rescatistas caninos.*
-
-Otros modos: `simular inundacion`, `simular calor`, `simular normal`.
-
-### 4. Vigilancia automática continua
-Para monitoreo desatendido que emite alertas automáticas al grupo multicast `"rescate"`:
-```
-vigilancia 3
-```
-Cada 3 segundos lee el sensor, evalúa con la red, y si detecta una emergencia grave (incendio, inundación, escombros) emite una alerta crítica que se proyecta en color rojo en todas las terminales que ejecuten `applications/monitor.py`. Para detenerlo, presione `Enter`.
+4. **Prueba combinada con simulación de desastres:**
+   * Ejecuta `simular incendio` y luego `evaluar`:
+     * Diagnóstico: `ALERTA_INCENDIO (100.0% confianza)`
+     * Acción: *EVACUACION INMEDIATA. Despacho urgente de brigada contra incendios y cortafuegos.*
+   * Ejecuta `simular escombros` y luego `evaluar`:
+     * Diagnóstico: `POSIBLE_ATRAPADO_ESCOMBROS (100.0% confianza)`
+     * Acción: *RESCATE USAR PRIORITARIO. Despachar equipo de busqueda canina y remocion de escombros.*
 
 ---
 
-## La prueba que de verdad demuestra que funciona
+## 7. Fase 6 — Vigilancia Continua y Alertas Multicast
 
-Todo lo anterior se podría lograr con una red normal. Lo que demuestra que la
-malla está haciendo su trabajo es esto:
+Para mantener monitoreo desatendido en el perímetro de rescate:
 
-**Ponga los tres equipos de modo que el 1 y el 3 no se escuchen entre sí.**
-En el laboratorio de contenedores ya quedan así. Con Raspberry Pi, basta con
-alejarlos o tapar uno con algo.
+1. Asegúrate de tener abierto `applications/monitor.py` en una terminal.
+2. En la terminal del nodo sensor, activa la vigilancia periódica (por ejemplo, cada 3 segundos):
+   ```
+   vigilancia 3
+   ```
+3. El nodo leerá los sensores cada 3 segundos y solicitará evaluación a la red.
+4. Mientras el entorno sea normal, no se genera tráfico innecesario.
+5. Inyecta una emergencia (p. ej. en otra terminal escribe `simular incendio` o cubre totalmente el sensor de luz):
+   * En la terminal del nodo sensor aparecerá la advertencia de disparo.
+   * En la pantalla del **monitor**, la alerta crítica se proyectará inmediatamente en **color rojo**, indicando la clasificación y el nodo origen.
+6. Para detener el ciclo de vigilancia, presiona `Enter` en la consola.
 
-Compruébelo:
+---
 
+## 8. Fase 7 — Mensajería y Grupos Temáticos
+
+1. **Mensaje a toda la malla (Broadcast UDP):**
+   ```
+   todos Aviso a todas las unidades de campo
+   ```
+   *Aparece en todas las terminales activas de la red.*
+
+2. **Mensaje directo punto a punto (TCP Unicast):**
+   ```
+   msg nodo-02 Verificando estado de bateria
+   ```
+   *Llega exclusivamente a `nodo-02` con confirmación de entrega.*
+
+3. **Comunicación por grupos (Multicast):**
+   * En `nodo-02`, suscríbete al grupo de rescate:
+     ```
+     unir rescate
+     ```
+   * En `nodo-01`, envía un mensaje al grupo:
+     ```
+     grupo rescate Brigada alfa en posicion
+     ```
+   * `nodo-02` recibe el mensaje. Si hubiera un `nodo-03` que no se ha unido al grupo `rescate`, descartará el mensaje a nivel de aplicación.
+
+---
+
+## 9. Fase 8 — Cómputo Colaborativo y Balanceo de Carga
+
+1. **Cálculo matemático seguro (`calc`):**
+   ```
+   calc (50 * 4) + sqrt(144)
+   ```
+   *El planificador asigna la operación al mejor nodo según $F(i,j)$. El nodo ejecutor evalúa la expresión mediante análisis de sintaxis abstracta (AST seguro, sin `eval`) y retorna `212.0`.*
+
+2. **Estrés de carga computacional (`estres`):**
+   ```
+   estres 10 4
+   ```
+   *Reparte 4 tareas de consumo intensivo de CPU (durante 10 s cada una) entre los nodos disponibles en la red. Si observas la pantalla de `monitor.py`, verás reflejado el incremento de carga y cómo las siguientes tareas evitan a los nodos saturados.*
+
+---
+
+## 10. Fase 9 — Tolerancia a Fallos y Reasignación
+
+Esta prueba verifica que las tareas sobreviven a la desconexión o muerte de un nodo ejecutor:
+
+### Verificación mediante suite automatizada (100% reproducible):
+Ejecuta la prueba que simula la caída del nodo ejecutor en medio de una inferencia de IA:
 ```bash
-# en el nodo 1
-batctl neighbors     # debe aparecer SOLO el nodo 2
-batctl originators   # deben aparecer el 2 Y el 3
+cd complexnet-api
+python -m pytest tests/test_ia_urgencias.py -k "reasignacion" -v
 ```
+*Resultado:* La prueba inicia 2 nodos, envía una tarea de IA al nodo 2, apaga abruptamente el nodo 2 antes de que responda, y comprueba que el `GestorRecuperacion` reasigna la tarea al nodo local completando el diagnóstico exitosamente.
 
-Si el 3 no está en `neighbors` pero sí en `originators`, es porque batman
-encontró la ruta por el 2.
-
-Ahora mande un mensaje del 1 al 3 y déjelo corriendo. Mientras tanto, en el
-**nodo 2**, que no es ni origen ni destino:
-
-```bash
-sudo tcpdump -i bat0 -n
-```
-
-Va a ver pasar tráfico que no es suyo: está reenviando. Eso es el salto
-intermedio funcionando, y no hay forma de simularlo.
-
-Y el remate: **apague el nodo 2**. El mensaje del 1 al 3 deja de llegar,
-porque se cayó el único puente. Vuelva a prenderlo y la comunicación se
-restablece sola, sin que nadie configure nada.
+### Verificación en red activa:
+1. Con 2 o más nodos corriendo, lanza una tarea de estrés prolongada: `estres 30 2`.
+2. Cierra inmediatamente la terminal de uno de los nodos ejecutores (simulando corte de energía).
+3. A los 15 segundos el nodo restante lo marcará como `SOSPECHOSO`, a los 30 segundos como `INACTIVO`, y la tarea huérfana será rescatada y completada.
 
 ---
 
-## Guion y Estructura Recomendada para el Video de Sustentación
+## 11. Fase 10 — Inspección de Paquetes en Tránsito
 
-Para que el profesor entienda claramente el proyecto, el video no debe ser solo una muestra de comandos, sino una **demostración guiada con justificación teórica y técnica**:
+Para verificar que los mensajes viajan realmente por la interfaz de red y comprobar su estructura:
 
-### Parte 1: Introducción y Modelo de Sistemas Complejos (2 a 3 min)
-* **El Problema:** Explicar el escenario de desastre natural donde colapsan antenas celulares, fibra óptica y energía.
-* **Comportamiento Emergente:** Explicar que la red no tiene un "jefe" ni servidor central; cada nodo ejecuta reglas locales sencillas y, de su interacción mutua, emerge una red mallada coordinada y resiliente.
-* **Modelo Matemático:**
-  * Grafo dinámico $G(t) = (V(t), E(t))$.
-  * Vector de estado $S_i(t) = [C_i, M_i, B_i, R_i, A_i]$.
-  * Planificador distribuido $F(i, j) = w_1 C_i + w_2 M_i + w_3 B_i + w_4 R_i - w_5 L_i$.
+1. **Inspeccionar tramas de descubrimiento y latidos (UDP puerto 5000):**
+   ```bash
+   sudo tcpdump -i bat0 -A -n udp port 5000
+   ```
+   *Verás pasar en texto claro las tramas JSON con encabezados de secuencia y relojes de Lamport (`HEARTBEAT` y `RESOURCE_UPDATE`).*
 
-### Parte 2: Despliegue de la Malla y Descubrimiento (3 min)
-* Mostrar en terminal `batctl originators`: señalar que los nodos se ven aunque estén a varios saltos.
-* Iniciar `applications/mensajeria.py`: mostrar cómo se descubren solos por UDP broadcast sin tocar ningún router.
-* Mostrar `todos <mensaje>` (broadcast) y `msg <nodo> <mensaje>` (TCP directo).
-* Mostrar multicast: `unir rescate` en dos nodos y `grupo rescate <alerta>`, demostrando que solo los suscritos procesan el mensaje.
+2. **Inspeccionar tareas y mensajes directos (TCP puerto 5001):**
+   ```bash
+   sudo tcpdump -i bat0 -A -n tcp port 5001
+   ```
 
-### Parte 3: Hardware de Borde (ESP32) e Inteligencia Artificial CART (3 a 4 min)
-* **La Baliza ESP32:** Mostrar en cámara la placa ESP32 con sus sensores:
-  * DHT11 (temperatura y humedad de aire).
-  * Sensor capacitivo v2 (humedad de suelo calibrado por ADC).
-  * GY-302 BH1750 (iluminación en Lux por I2C).
-* **Lectura en Vivo:** Ejecutar `sensor` en la consola para ver los datos reales.
-* **Evaluación con IA Distribuida:** Ejecutar `evaluar`. Señalar en pantalla que la telemetría se envió a la red y el nodo óptimo la diagnosticó.
-* **Justificación de la IA ante el Profesor:**
-  * *¿Por qué un Árbol de Decisión CART?* Explicar los tres pilares:
-    1. **Explicabilidad (XAI):** En rescate humano, un modelo interpretable permite auditar las reglas exactas (p. ej. oscuridad profunda $\le 2.75\text{ lux}$ y suelo seco indican colapso estructural / personas atrapadas).
-    2. **Ejecución Ligera en RAM (`toram`):** Corre en Python puro nativo sin librerías pesadas (`scikit-learn` o `torch`), ideal para USBs en RAM sin internet.
-    3. **Inferencia Instantánea:** Diagnóstico en $< 0.2\text{ ms}$.
-* **Simulación de Emergencias:** Ejecutar `simular incendio` y `evaluar`, luego `simular escombros` y `evaluar`.
-* **Vigilancia Continua:** Ejecutar `vigilancia 3` y mostrar cómo en la pantalla de `applications/monitor.py` saltan las alertas perimetrales en color rojo.
-
-### Parte 4: Cómputo Colaborativo y Tolerancia a Fallos (3 min)
-* Ejecutar `calc (10 + 20) * 2`: mostrar que la resuelve el nodo con mayor $F(i,j)$ y retorna el resultado por TCP.
-* Ejecutar `estres 20 2`: mostrar en el monitor cómo el planificador reparte los subprocesos entre los nodos disponibles.
-* **La Prueba Reina (Tolerancia a Fallos en Vivo):** Lanzar una tarea o prueba de estrés y apagar de golpe uno de los nodos ejecutores. Mostrar cómo el `GestorRecuperacion` detecta la caída y reasigna automáticamente la tarea al segundo mejor nodo sin intervención humana.
-
-### Parte 5: Conclusiones y Trazabilidad (1 min)
-* Mostrar brevemente la carpeta `logs/*.jsonl` y ejecutar `python3 examples/analizar_logs.py logs`.
-* Resaltar que todos los eventos tienen sello temporal de Lamport para mantener causalidad sin necesidad de reloj NTP sincronizado.
+3. **Inspección visual con Wireshark:**
+   Abre Wireshark sobre la interfaz `bat0` y aplica el filtro:
+   `udp.port == 5000 || tcp.port == 5001`
 
 ---
 
-## Checklist para el video
+## 12. Resolución de Problemas Frecuentes
 
-| Qué mostrar | Cómo se ve que funcionó |
-|---|---|
-| La malla se armó sola | `batctl originators` con los tres nodos |
-| Hay ruta de varios saltos | `neighbors` tiene menos nodos que `originators` |
-| El descubrimiento funciona | La tabla de vecinos llenándose sola |
-| Mensajes a todos | El mismo texto apareciendo en dos terminales |
-| Mensaje directo | Llega solo al destinatario |
-| Multicast | `grupo rescate ...` llega al que hizo `unir rescate` y no al otro |
-| Latencia medida | El `ping` con los milisegundos |
-| Los mensajes existen | tcpdump con el JSON en pantalla |
-| Salida ordenada | Ctrl+C en un nodo: desaparece al momento |
-| Caída de golpe | Cerrar la terminal: SOSPECHOSO a los 15 s, INACTIVO a los 30 |
-| Se recupera solo | Volver a prenderlo y verlo reintegrarse |
-| Recursos | `recursos`: el vector [C, M, B, R, A] de cada nodo |
-| Asignación de tareas | `calc 10 + 20`: responde 30 y dice qué nodo la ejecutó |
-| Archivos comprimidos | `archivo nodo-2 censo.txt` con un texto grande: dice "viajó comprimido en ... KB: 99 % menos" y llega idéntico. Con una foto `.jpg` va sin comprimir |
-| Reparto y costo | `estres 15` con `applications/monitor.py` abierto: cada nodo recibe una parte y se ve su CPU bajar |
-| Lectura ESP32 en vivo | `sensor` mostrando temperatura, humedad de aire, suelo calibrado y lux de la placa física |
-| Inferencia de IA distribuida | `evaluar` enviando telemetría por la malla; el mejor nodo responde diagnóstico y confianza |
-| Simulación de desastres | `simular incendio` o `escombros` y ver clasificar en `ALERTA_INCENDIO` o `POSIBLE_ATRAPADO_ESCOMBROS` |
-| Vigilancia perimetral continua | `vigilancia 3` en nodo sensor: al detectar emergencia grave, `applications/monitor.py` muestra alerta roja en vivo |
-| Reasignación | Ver abajo |
-
-### La reasignación en vivo
-
-Es la prueba más fuerte, porque junta tareas, planificador, detección de
-fallos y recuperación. La caída tiene que ocurrir con la tarea en curso, y
-`estres` da el tiempo: desde el nodo 1, `estres 60 2`, y con el monitor ver
-qué nodo ejecuta una parte. Cerrar de golpe esa terminal: a los 30 s el
-monitor lo marca caído, la recuperación reasigna su parte y el `estres`
-termina igual, diciendo quién hizo cada parte. También se puede correr la
-prueba automática, que hace exactamente eso, y mostrar su registro:
-
-```bash
-python3 -m pytest tests/test_tareas.py -k "se_cae_el_ejecutor" -v
-```
-
-O con la regresión de tu compañero, que tarda más: lanzarla, apagar de golpe
-el nodo que está ejecutando un pedazo y mostrar que el resultado llega igual.
-En `analizar_logs.py` debe aparecer
-`REASIGNA tarea ...: nodo_caido (estaba en nodo-X)`.
-
-Las últimas tres son las que más pesan en la nota, porque son la evidencia de
-tolerancia a fallos.
-
-Al terminar, junte en una carpeta los `logs/*.jsonl` de los tres equipos y
-corra `python3 examples/analizar_logs.py logs`. Muestra una línea de tiempo
-común y cuánto tardó cada nodo en pasar de SOSPECHOSO a INACTIVO. Es la
-evidencia escrita de lo que se vio en el video.
-
----
-
-## Qué hacer si algo no funciona
-
-| Síntoma | Causa probable |
-|---|---|
-| `bat0` no existe | Falta `sudo modprobe batman-adv` |
-| `batctl originators` vacío | Todavía no convergen los OGM; espere 10 segundos |
-| Los nodos no se ven, pero `ping` entre ellos sí funciona | La difusión está saliendo por otra interfaz. Revise que el tercer argumento sea la difusión de la malla, `10.10.0.255` |
-| `Address already in use` | Otro nodo ya tomó ese puerto TCP en el mismo equipo. Use el cuarto argumento |
-| Un nodo se ve a sí mismo en la lista | No debería pasar: el código descarta sus propios mensajes por `sender` |
-| Llegan mensajes cortados | Es el enmarcado de TCP. Revise que se esté usando `enviar()` y no un socket suelto |
+| Síntoma | Causa Probable | Solución |
+|---|---|---|
+| `bat0: No such device` | No se ha cargado el módulo de kernel de batman-adv. | Ejecuta `sudo modprobe batman-adv`. Si no existe el módulo, revisa `PREPARAR_USB.md` para instalar `linux-modules-extra`. |
+| `batctl originators` aparece vacío | Los paquetes de anuncio (OGM) tardan unos segundos en converger. | Espera 10 a 15 segundos con las interfaces Wi-Fi encendidas. Verifica que todos los equipos usen el mismo SSID y canal (`COMPLEXNET`, canal 1). |
+| `PermissionError: COM3` o `/dev/ttyUSB0` | El monitor serial de PlatformIO / Arduino IDE tiene abierto el puerto exclusivamente. | Cierra el monitor serie en VS Code o cualquier programa que esté leyendo la ESP32. En Linux, añade tu usuario al grupo dialout: `sudo usermod -aG dialout $USER`. |
+| Los nodos no se ven en la mensajería | La difusión UDP está saliendo por una interfaz de red equivocada. | Asegúrate de pasar la interfaz correspondiente (en red real: `bat0`, en modo local: `--local`). |
+| `Address already in use` | Se intentó iniciar dos nodos con el mismo puerto TCP en la misma máquina. | Asigna puertos TCP distintos con `--puerto-tcp 5002` o utiliza `--local`, que gestiona puertos automáticamente. |
