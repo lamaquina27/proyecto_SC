@@ -54,7 +54,7 @@ if (Test-Path $Paquetes) {
 }
 
 $faltan = @()
-foreach ($p in @("batctl", "iw", "python3-psutil")) {
+foreach ($p in @("batctl", "iw", "python3-psutil", "python3-serial")) {
     if (-not (Get-ChildItem $DestinoPaquetes -Filter "${p}_*.deb" -ErrorAction SilentlyContinue)) {
         $faltan += $p
     }

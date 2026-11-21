@@ -3,194 +3,237 @@
 </p>
 
 # ComplexNet API
-
-**Computadores que se organizan solos para comunicarse y trabajar juntos
-cuando no hay internet.**
-
-Proyecto integrador de **Sistemas Complejos** — Universidad Sergio Arboleda.
-Felipe Morales Robelto y Juan David Sánchez Vargas.
+### Framework para Computación Descentralizada sobre Redes Ad hoc
+**Proyecto Integrador — Sistemas Complejos (Corte 3)**  
+**Universidad Sergio Arboleda** — Escuela de Ciencias Exactas e Ingeniería  
+*Programa de Ciencias de la Computación e Inteligencia Artificial*  
+**Autores:** Felipe Morales Robelto y Juan David Sánchez Vargas  
+**Docente:** Joaquín F. Sánchez Cifuentes  
+**Año:** 2026  
 
 ---
 
-## ¿Qué problema resuelve?
+## 1. ¿Qué problema resuelve?
 
-Cuando ocurre un desastre natural (un terremoto, una inundación, un
-deslizamiento) lo primero que se cae es la comunicación: las antenas de
-celular, la luz y el internet. Justo cuando los rescatistas más necesitan
-coordinarse.
+Cuando ocurre un desastre natural (un terremoto, una inundación o un colapso estructural), la infraestructura de telecomunicaciones convencional (antenas celulares, fibra óptica, internet y energía eléctrica) colapsa, aislando a las brigadas de emergencia en el momento más crítico.
 
-ComplexNet permite que un grupo de computadores pequeños (portátiles o
-Raspberry Pi) que estén en la zona:
+**ComplexNet API** permite que un conjunto de computadores móviles y heterogéneos (computadores portátiles, Raspberry Pi y microcontroladores ESP32 como extensiones sensoriales) formen una red inalámbrica descentralizada sin depender de ningún servidor central:
 
-- **se encuentren solos**, sin que nadie los configure;
-- **se manden mensajes y archivos**, sin internet y sin un servidor central;
-- **se repartan el trabajo**: cada tarea la hace el equipo que esté en mejores
-  condiciones;
-- **sigan funcionando cuando uno se apaga**: los demás lo detectan y retoman
-  su trabajo.
-
-No hay un "jefe": todos los equipos siguen las mismas reglas sencillas y, de
-todos juntos, sale una red organizada. En Sistemas Complejos eso se llama
-**comportamiento emergente**.
-
-## ¿Cómo funciona? (en un minuto)
+- **Se encuentran solos:** Descubrimiento automático entre pares mediante protocolos reactivos y latidos periódicos.
+- **Se comunican sin internet:** Mensajería directa punto a punto, difusión general y grupos multicast temáticos (p. ej. `"rescate"`).
+- **Se reparten el trabajo:** Planificación descentralizada multi-criterio donde cada tarea la procesa el nodo con mejores condiciones de cómputo y señal.
+- **Toleran fallos:** Si un nodo se desconecta o colapsa en medio de un cálculo, los vecinos lo detectan y reasignan la tarea automáticamente sin pérdida de datos.
+- **Clasifican emergencias con Inteligencia Artificial:** Diagnóstico en tiempo real mediante un Árbol de Decisión CART nativo y explicable.
 
 ```
-  Aplicaciones        mensajería · sensores · IA de predicción · monitor
-        │
-  API (clase Nodo)    lo único que necesita conocer quien programa una aplicación
-        │
-  Servicios           descubrimiento · recursos · planificador · tareas ·
-        │             recuperación · registro de eventos
-  Comunicación        mensajes cortos por UDP, mensajes largos y archivos por TCP
-        │
-  B.A.T.M.A.N.        protocolo de Linux que lleva los mensajes de equipo en
-        │             equipo, aunque haya que pasar por otros (red "en malla")
-  Wi-Fi ad hoc        las tarjetas Wi-Fi se hablan directamente, sin router
+       [ ESP32 Sensor Edge ]
+                 │ (USB / Telemetría Serial)
+                 ▼
+          ┌─────────────┐
+          │   Nodo 1    │ (Nodo de Campo / Baliza)
+          └──────┬──────┘
+                 │
+       (Malla Ad hoc Wi-Fi IBSS / B.A.T.M.A.N. Advanced)
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+ ┌─────────────┐   ┌─────────────┐
+ │   Nodo 2    │   │   Nodo 3    │
+ │ Evaluador IA│   │   Monitor   │
+ └─────────────┘   └─────────────┘
 ```
 
-1. Cada equipo pone su tarjeta Wi-Fi en **modo ad hoc**: las tarjetas se
-   hablan directamente, como walkie-talkies, sin router.
-2. **B.A.T.M.A.N.** encuentra el camino entre equipos aunque estén lejos y
-   haya que pasar por otro.
-3. Cada nodo **anuncia** cada 5 segundos que está vivo y **cómo se siente**
-   (CPU, memoria, batería, calidad de la señal).
-4. Si un nodo se calla 15 s queda **sospechoso**, y a los 30 s se da por
-   **caído**.
-5. Para repartir una tarea, cada nodo calcula un **puntaje** para sus vecinos
-   y escoge al mejor:
+---
 
-   ```
-   F = CPU libre + memoria libre + calidad de señal + confiabilidad − carga
-   ```
+## 2. Modelo Conceptual y Matemático de Sistemas Complejos
 
-6. Si el que estaba haciendo la tarea se cae, la tarea **se reasigna sola**.
+El sistema modela la red como un **sistema complejo autoorganizado, robusto y adaptativo**:
 
-## ¿Qué se puede hacer con él?
+1. **Grafo Dinámico de Red:**
+   $$G(t) = (V(t), E(t))$$
+   Donde $V(t)$ representa los nodos disponibles en el instante $t$, y $E(t)$ los enlaces activos entre ellos, adaptándose dinámicamente ante movilidad, fallos de batería o interferencias.
+
+2. **Vector de Estado de los Nodos:**
+   Cada nodo $v_i$ publica periódicamente su vector de recursos normalizado $[0, 1]$:
+   $$S_i(t) = [C_i(t), M_i(t), B_i(t), R_i(t), A_i(t)]$$
+   * $C_i$: Capacidad de CPU disponible ($1.0 - \text{uso\_cpu}$).
+   * $M_i$: Memoria RAM disponible ($\text{mem\_libre} / \text{mem\_total}$).
+   * $B_i$: Calidad del enlace de red (métrica $TQ/255$ provista por B.A.T.M.A.N. Advanced).
+   * $R_i$: Nivel de reputación / confiabilidad histórica de tareas exitosas.
+   * $A_i$: Disponibilidad del nodo ($A_i < 0.2$ filtra nodos que no pueden recibir tareas).
+
+3. **Planificador Distribuido (Función de Aptitud):**
+   Para cada tarea $T_j$, el nodo solicitante selecciona al mejor ejecutor maximizando:
+   $$F(i, j) = w_1 C_i + w_2 M_i + w_3 B_i + w_4 R_i - w_5 L_i$$
+   $$i^* = \arg\max_{i \in V_{\text{capaces}}} F(i, j)$$
+   Donde $L_i$ representa la carga actual de tareas asignadas al nodo $i$.
+
+---
+
+## 3. Las Tres Aplicaciones Descentralizadas (Fase 3)
 
 | Aplicación | Qué hace | Estado |
+|---|---|:---:|
+| **1. Monitoreo Ambiental y Alertas** | Lectura física con ESP32 (DHT11, sensor de suelo capacitivo, GY-302 BH1750) y difusión automática de alarmas por multicast `"rescate"`. | ✅ Lista |
+| **2. Cómputo Colaborativo y Balanceo** | Reparto de tareas matemáticas seguras (`calc` por AST) y estrés computacional en paralelo (`estres`). | ✅ Lista |
+| **3. Inteligencia Artificial (CART)** | Diagnóstico perimetral en tiempo real (incendio, inundación, atrapado en escombros, calor extremo, normal). | ✅ Lista |
+| **Panel de Supervisión (Monitor)** | Visualización en vivo en terminal del estado de la red, métricas de hardware y alertas de rescate. | ✅ Listo |
+
+### Detalle de la Aplicación de Inteligencia Artificial (CART)
+
+* **Fundamento Matemático (Impureza de Gini):**
+  El clasificador particiona recursivamente las variables sensoriales $(\text{temperatura}, \text{humedad\_aire}, \text{suelo}, \text{luz})$ optimizando la reducción de impureza:
+  $$I_G(S) = 1 - \sum_{k=1}^{C} p_k^2$$
+  $$\Delta I_G(S, f, \theta) = I_G(S) - \left( \frac{|S_L|}{|S|} I_G(S_L) + \frac{|S_R|}{|S|} I_G(S_R) \right)$$
+
+* **¿Por qué un Árbol de Decisión CART frente a Redes Neuronales o SVM?**
+
+| Criterio de Selección | Árbol de Decisión CART (Elegido) | Redes Neuronales (MLP) | Support Vector Machines (SVM) |
+|---|:---:|:---:|:---:|
+| **Explicabilidad (XAI)** | **Total:** Reglas lógicas transparentes y auditables | Nula ("Caja negra") | Baja (Depende de transformaciones) |
+| **Entorno Efímero en RAM (`toram`)** | **0 dependencias pesadas:** Python puro nativo | Requiere PyTorch / TF (~500 MB) | Requiere Scikit-Learn (~150 MB) |
+| **Tiempo de Inferencia** | **$< 0.2\text{ ms}$** (Ultrarrápido) | $15 - 50\text{ ms}$ | $5 - 15\text{ ms}$ |
+| **Tolerancia a Sensores Parciales** | Alta (Particiones ortogonales) | Media | Sensible a escala y normalización |
+
+> **Justificación en Rescate:** En una misión de rescate humano, las decisiones deben ser auditables. Un brigadista puede inspeccionar la regla exacta que activó `POSIBLE_ATRAPADO_ESCOMBROS` (luz $\le 2.75\text{ lux}$ y suelo seco) en lugar de depender de pesos opacos de una red neuronal.
+
+* **Métricas Obtenidas en Validación:**
+  * **Exactitud Global (Accuracy):** **$97.5\%$**
+  * **F1-Scores por Categoría:** Normal ($0.931$), Incendio ($1.000$), Inundación ($0.987$), Escombros ($0.964$), Calor ($0.993$).
+
+---
+
+## 4. Documentación Completa del Proyecto
+
+| Documento | Audiencia | Contenido |
 |---|---|---|
-| **Mensajería** | Mensajes a uno, a un grupo o a todos; archivos (comprimidos cuando conviene); cálculos y pruebas de carga repartidos en la red | ✅ Lista |
-| **Sensores** | Lectura de temperatura, presión y humedad; cada nodo guarda, comparte y procesa sus datos | 🔨 En desarrollo |
-| **IA de predicción** | Con los datos de los sensores, predice cambios y detecta valores anormales (alertas de incendio o tormenta) | 📋 Planeada |
-| **Monitor** | Muestra en vivo los recursos y las tareas de cada nodo | ✅ Listo |
+| [Manual del Desarrollador](complexnet-api/docs/manual_desarrollador.md) | Desarrolladores de aplicaciones | Guía paso a paso para crear nuevos servicios sobre `Nodo`. |
+| [Manual Técnico de la API](complexnet-api/docs/api/manual.md) | Diseñadores de sistemas | Protocolo de mensajes, formato JSON, enmarcado TCP y opciones. |
+| [Decisiones de Diseño](complexnet-api/docs/diseno.md) | Evaluadores y arquitectos | Registro de 29 decisiones arquitectónicas justificadas. |
+| [Matriz de Entregables — Corte 3](complexnet-api/docs/entregables_corte3.md) | Docente y evaluadores | Verificación de cumplimiento de los 10 requisitos oficiales. |
+| [Informe Experimental — Corte 3](complexnet-api/docs/informe_experimental_corte3.md) | Comunidad académica | Análisis formal de los 5 puntos exigidos en la Sección 7.3. |
+| [Informe Experimental — Mediciones Base](complexnet-api/docs/informe_experimental.md) | Análisis de red | Resultados numéricos de latencia, fallos y escalabilidad. |
+| [Métricas del Árbol de Decisión](complexnet-api/docs/metricas_arbol_decision.txt) | Machine Learning | Reporte cuantitativo detallado y matriz de confusión del modelo. |
+| [Cómo Probarlo](COMO_PROBARLO.md) | Brigadistas y sustentación | Guía paso a paso de pruebas, telemetría y guion del video. |
+| [Preparar la USB](PREPARAR_USB.md) | Montaje de laboratorio | Guía para crear el instalador Ubuntu con `toram` sin internet. |
 
-## Probarlo en 2 minutos (en un solo computador)
+---
 
-Necesitas **Python 3.10 o más nuevo**. Funciona en Windows, Linux y macOS.
-
-```bash
-git clone https://github.com/lamaquina27/proyecto_SC.git
-cd proyecto_SC/complexnet-api
-pip install -r requirements.txt
-```
-
-Abre **tres terminales** y en cada una escribe:
-
-```bash
-python applications/mensajeria.py --local
-```
-
-En unos segundos cada terminal muestra `>> entro ...`: los nodos se
-encontraron solos. Prueba en cualquiera:
-
-```
-lista                        ver quién está conectado
-todos hola a todos           mensaje a todos
-msg <nombre> hola            mensaje a uno (el nombre sale en "lista")
-calc (10 + 20) * 2           una cuenta que hace el mejor nodo de la red
-archivo <nombre> notas.txt   mandar un archivo
-salir
-```
-
-En una cuarta terminal puedes abrir el monitor:
-
-```bash
-python applications/monitor.py --local
-```
-
-## Usarlo de verdad (varios equipos, sin internet)
-
-Con equipos que tengan Linux y una tarjeta Wi-Fi que soporte el modo ad hoc:
-
-```bash
-sudo ./setup_adhoc.sh 1                          # en el equipo 1 (2, 3... en los demás)
-cd complexnet-api
-sudo python3 applications/mensajeria.py
-```
-
-Para el laboratorio se usa **una sola USB** con Ubuntu que se carga en la
-memoria de cada equipo. El paso a paso está en
-[`PREPARAR_USB.md`](PREPARAR_USB.md).
-
-## Documentación
-
-| Documento | Para quién | Qué tiene |
-|---|---|---|
-| [Manual del desarrollador](complexnet-api/docs/manual_desarrollador.md) | Quien quiere **hacer su propia aplicación** | Paso a paso con ejemplos, desde cero |
-| [Manual técnico](complexnet-api/docs/api/manual.md) | Quien quiere **entender o modificar** el sistema | Cada operación, mensaje y parámetro |
-| [Decisiones de diseño](complexnet-api/docs/diseno.md) | Quien pregunta **por qué** se hizo así | 29 decisiones justificadas |
-| [Informe experimental](complexnet-api/docs/informe_experimental.md) | Quien quiere **ver los números** | Latencia, escalabilidad y tolerancia a fallos |
-| [Cómo probarlo](COMO_PROBARLO.md) | Quien va a **demostrarlo** | Comprobaciones y guion del video |
-| [Preparar la USB](PREPARAR_USB.md) | Quien va a **montar el laboratorio** | Ubuntu en RAM, paso a paso |
-
-## Cómo está organizado el repositorio
+## 5. Organización del Repositorio
 
 ```
 proyecto_SC/
-├── README.md                 este archivo
-├── setup_adhoc.sh            monta la red en malla en un equipo Linux
-├── arrancar_nodo.sh          prepara un equipo desde la USB y abre la mensajería
-├── preparar_usb.ps1          copia el proyecto a la USB (desde Windows)
-├── PREPARAR_USB.md · COMO_PROBARLO.md
+├── README.md                      # Documentación maestra del repositorio
+├── COMO_PROBARLO.md               # Guía paso a paso de verificación y demostración
+├── PREPARAR_USB.md                # Manual para montar Ubuntu Live con toram
+├── preparar_usb.ps1               # Script PowerShell para sincronizar la memoria USB
+├── arrancar_nodo.sh               # Script de inicio del nodo en Linux / toram
+├── setup_adhoc.sh                 # Configuración de interfaces Wi-Fi y batman-adv
+│
 └── complexnet-api/
-    ├── src/                  el núcleo (la API)
-    │   ├── api/              la clase Nodo: la puerta de entrada
-    │   ├── communication/    mensajes, archivos y la interfaz de la malla
-    │   ├── discovery/        quién está, cómo está y quién se cayó
-    │   ├── resources/        mide CPU, memoria, señal, batería y carga
-    │   ├── scheduler/        escoge el mejor nodo para cada tarea
-    │   ├── tasks/            manda, ejecuta y reasigna tareas
-    │   └── monitoring/       registro de eventos
-    ├── applications/         las aplicaciones (mensajería, monitor...)
-    ├── tests/                125 pruebas automáticas
-    ├── experimentos/         mediciones de latencia, escalabilidad y fallos
-    ├── examples/             demos pequeños y análisis de registros
-    └── docs/                 manuales, decisiones e informe
+    ├── README.md                  # Manual técnico de la biblioteca en Python
+    ├── requirements.txt           # Dependencias básicas del entorno
+    ├── applications/              # Capa 5: Aplicaciones descentralizadas
+    │   ├── mensajeria.py          # Consola interactiva de brigada
+    │   ├── monitor.py             # Monitor perimetral en tiempo real
+    │   ├── operaciones.py         # Cómputo distribuido y estrés de CPU
+    │   ├── arbol_decision.py      # Motor de IA: Clasificador de urgencias CART
+    │   └── sensor_emergencia.py   # Lector USB de ESP32 + simulador de respaldo
+    ├── scripts/                   # Entrenamiento del modelo de Machine Learning
+    │   ├── dataset_emergencias.csv# Dataset con 2,000 muestras de entrenamiento
+    │   └── entrenar_arbol.py      # Algoritmo CART nativo (Gini, matriz de confusión)
+    ├── src/                       # Capas 2, 3 y 4: Núcleo de la API
+    │   ├── api/                   # Fachada Nodo e Identidad persistente
+    │   ├── communication/         # Sockets UDP/TCP, compresión y enmarcado
+    │   ├── discovery/             # Vecinos, anuncios y detector de fallos
+    │   ├── monitoring/            # Registro distribuido JSONL y Lamport
+    │   ├── resources/             # Gestor del vector [C, M, B, R, A]
+    │   ├── scheduler/             # Planificador distribuido F(i,j)
+    │   └── tasks/                 # Gestor de tareas y recuperación por caídas
+    ├── tests/                     # Suite de pruebas automatizadas (128+ tests)
+    │   └── test_ia_urgencias.py   # Pruebas de la IA distribuida y tolerancia a fallos
+    ├── experimentos/              # Mediciones de desempeño en red y gráficas
+    └── docs/                      # Manuales, decisiones e informes de entrega
 ```
 
-## Pruebas
+---
+
+## 6. Guía Rápida de Uso
+
+### Opción A: Pruebas Locales (Windows o Linux en un solo equipo)
+
+1. **Instalar dependencias:**
+   ```bash
+   cd complexnet-api
+   pip install -r requirements.txt pyserial
+   ```
+
+2. **Terminal 1 — Monitor de la Red:**
+   ```bash
+   python applications/monitor.py --local
+   ```
+
+3. **Terminal 2 — Nodo Sensor (conecta tu ESP32 o usa el simulador):**
+   ```bash
+   python applications/mensajeria.py --local --nombre nodo-sensor
+   ```
+
+4. **Terminal 3 — Nodo Brigada (Evaluador de IA):**
+   ```bash
+   python applications/mensajeria.py --local --nombre nodo-brigada
+   ```
+
+**Comandos útiles dentro de `mensajeria.py`:**
+* `sensor`: Muestra las lecturas físicas de la ESP32 o telemetría simulada.
+* `evaluar`: Envía la telemetría a la red para clasificación con IA en el mejor nodo.
+* `simular incendio` (o `escombros`, `inundacion`, `calor`, `normal`): Inyecta escenarios de prueba.
+* `vigilancia 3`: Monitoreo perimetral automático que proyecta alarmas críticas en el monitor.
+* `calc (10 + 20) * 2`: Cálculo distribuido asignado por $F(i,j)$.
+* `estres 15 4`: Reparte 4 tareas de estrés computacional entre los nodos.
+
+---
+
+### Opción B: Despliegue en el Laboratorio (Red Ad hoc con USB `toram`)
+
+Se utiliza una sola memoria USB booteable con Ubuntu 24.04:
+
+1. **Sincronizar la USB en Windows:**
+   ```powershell
+   cd C:\Users\moral\Downloads\proyecto_SC
+   powershell -ExecutionPolicy Bypass -File .\preparar_usb.ps1 -Unidad E:
+   ```
+
+2. **Arrancar en cada computador:**
+   * Inicia el PC desde la USB, presiona `e` en el menú GRUB y añade `toram`.
+   * En el PC 1 (con la ESP32 conectada por USB):
+     ```bash
+     sudo bash /media/ubuntu/COMPLEXNET/complexnet/arrancar_nodo.sh 1
+     ```
+   * En el PC 2:
+     ```bash
+     sudo bash /media/ubuntu/COMPLEXNET/complexnet/arrancar_nodo.sh 2
+     ```
+   * En el PC 3:
+     ```bash
+     sudo bash /media/ubuntu/COMPLEXNET/complexnet/arrancar_nodo.sh 3
+     ```
+   El script copia todo a la RAM (`/opt/complexnet`), desmonta la USB para llevarla al siguiente equipo, configura `bat0` y abre la aplicación.
+
+---
+
+## 7. Pruebas Automatizadas
 
 ```bash
 cd complexnet-api
-python -m pytest tests -v        # 125 pruebas, unos 7 minutos
+
+# Ejecutar pruebas de la Inteligencia Artificial y tolerancia a fallos
+python -m pytest tests/test_ia_urgencias.py -v
+
+# Ejecutar suite completa
+python -m pytest tests/ -v
 ```
 
-Todas corren en un solo computador; no necesitan la red real.
+---
 
-## Mediciones
-
-```bash
-cd complexnet-api
-python experimentos/medir.py todo          # en un computador, ~10 min
-sudo python3 experimentos/medir.py malla   # en la red real
-python experimentos/graficas.py            # gráficas (necesita matplotlib)
-```
-
-Los resultados y su análisis están en el
-[informe experimental](complexnet-api/docs/informe_experimental.md).
-
-## Modelo matemático
-
-La red se modela como un grafo que cambia con el tiempo, y cada nodo como un
-vector de estado:
-
-```
-G(t) = (V(t), E(t))                    nodos y enlaces en el instante t
-S_i(t) = [C_i, M_i, B_i, R_i, A_i]     CPU, memoria, ancho de banda, confiabilidad, disponibilidad
-F(i,j) = w1·C + w2·M + w3·B + w4·R − w5·L
-i* = argmax F(i,j)                     el nodo con mayor puntaje recibe la tarea j
-```
-
-El detalle está en las [decisiones de diseño](complexnet-api/docs/diseno.md),
-secciones 18 y 19.
+## 8. Licencia
+Desarrollado con fines académicos en el marco de la asignatura Sistemas Complejos de la Universidad Sergio Arboleda.

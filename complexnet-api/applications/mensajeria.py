@@ -71,10 +71,12 @@ from src.api import Nodo
 from src.communication import APP_MSG, PING, PONG, malla
 
 from operaciones import ExpresionInvalida, calcular, estresar
+from arbol_decision import clasificar_urgencia
+from sensor_emergencia import SensorEmergencia
 
 DIFUSION_LOCAL = "127.255.255.255"
 PUERTO_TCP = 5001
-SERVICIOS = ["mensajeria"]
+SERVICIOS = ["mensajeria", "ia_urgencias"]
 
 AYUDA = """  comandos:
     lista | recursos | yo      quien esta y como esta
@@ -85,6 +87,10 @@ AYUDA = """  comandos:
     archivo <nodo> <ruta>      enviar un archivo
     calc <expresion>           operacion matematica: la ejecuta el mejor nodo
     estres <seg> [partes] [mb] carga de CPU repartida en la red
+    sensor | telemetria        lectura de la ESP32 (o telemetria simulada)
+    evaluar                    analiza la emergencia con IA en el mejor nodo
+    vigilancia [seg]           monitoreo y alerta automatica continua
+    simular <modo>             simular: normal, incendio, inundacion, escombros, calor
     ping <nodo> | red | stats | salir"""
 
 
@@ -99,6 +105,8 @@ def leer_argumentos():
     p.add_argument("--grupos", default="")
     p.add_argument("--logs", default="logs")
     p.add_argument("--archivos", default="recibidos")
+    p.add_argument("--puerto-sensor", default=None,
+                   help="puerto serie de la ESP32 (ej: COM3 o /dev/ttyUSB0)")
     return p.parse_args()
 
 
@@ -122,11 +130,15 @@ def compresion_legible(r):
 class Mensajeria:
     def __init__(self, args):
         self.nombres = {}
+        self.sensor = SensorEmergencia(puerto=args.puerto_sensor).iniciar()
+        self._vigilando = False
         self.nodo = self.arrancar(args)
 
     def configurar(self, nodo):
         nodo.registrar_operacion("calcular", calcular)
         nodo.registrar_operacion("estresar", estresar)
+        nodo.registrar_operacion("clasificar_urgencia", clasificar_urgencia)
+        nodo.unirse_a_grupo("rescate")
         nodo.al_recibir(APP_MSG, self.al_llegar_mensaje)
         nodo.al_recibir(PING, self.al_llegar_ping)
         nodo.al_recibir(PONG, self.al_llegar_pong)
@@ -403,6 +415,20 @@ class Mensajeria:
             self.en_segundo_plano(self.pedir_calculo, expresion)
         elif orden == "estres":
             self.ejecutar_estres(linea.split()[1:])
+        elif orden in ("sensor", "telemetria"):
+            self.mostrar_sensor()
+        elif orden == "evaluar":
+            self.en_segundo_plano(self.pedir_evaluacion_urgencia)
+        elif orden == "vigilancia":
+            seg = 5.0
+            if len(partes) > 1:
+                try:
+                    seg = max(1.0, float(partes[1]))
+                except ValueError:
+                    pass
+            self.conmutar_vigilancia(seg)
+        elif orden == "simular" and len(partes) > 1:
+            self.simular_emergencia(partes[1].lower())
         elif orden == "red":
             for clave, valor in malla.resumen(self.nodo.interfaz).items():
                 print(f"  {clave}: {valor}")
@@ -411,6 +437,80 @@ class Mensajeria:
                 print(f"  {clave}: {valor}")
         else:
             print(AYUDA)
+
+    def mostrar_sensor(self):
+        s = self.sensor.leer()
+        suelo_info = f"{s['suelo']} %"
+        if s.get("suelo_adc") is not None:
+            estado_suelo = "Saturado / Mojado" if s["suelo"] > 70 else ("Seco / Aire" if s["suelo"] < 25 else "Humedad Media")
+            suelo_info += f"  (ADC: {s['suelo_adc']} - {estado_suelo})"
+        print(f"  [Telemetria: {s['fuente']}]")
+        print(f"    Temperatura:        {s['temp']} °C")
+        print(f"    Humedad del aire:   {s['hum_aire']} %")
+        print(f"    Humedad de suelo:   {suelo_info}")
+        print(f"    Intensidad de luz:  {s['luz']} lux")
+
+    def pedir_evaluacion_urgencia(self, datos=None):
+        if datos is None:
+            datos = self.sensor.leer()
+        print(f"  enviando telemetria a la red para evaluacion de IA ({datos['fuente']})...", flush=True)
+        futuro = self.nodo.enviar_tarea_async("clasificar_urgencia", datos, timeout=8.0)
+        try:
+            r = futuro.result()
+        except Exception as e:
+            self.avisar(f"evaluacion de urgencia fallida: {e}")
+            return
+        t = futuro.tarea
+        donde = [self.nombre_de(n) for n in t.historial]
+        ejecutor = self.nombre_de(t.ejecutor)
+        clase = r.get("clase", "DESCONOCIDO")
+        confianza = r.get("confianza", 1.0) * 100
+        accion = r.get("accion_recomendada", "")
+
+        print(f"\n  ================ DIAGNOSTICO DE EMERGENCIA (IA) ================", flush=True)
+        print(f"  Clasificacion:       {clase} ({confianza:.1f}% confianza)")
+        print(f"  Accion Recomendada:  {accion}")
+        print(f"  Nodo Evaluador:      {ejecutor} (intentos: {' -> '.join(donde)})")
+        print(f"  ================================================================", flush=True)
+
+        # Si no es normal, difundir de inmediato al grupo de rescate
+        if clase != "NORMAL_ESTABLE":
+            alerta = f"[ALERTA CRITICA] {clase}: {accion} (reportado por {self.nodo.nombre})"
+            self.mandar_a_grupo("rescate", alerta)
+
+    def _bucle_vigilancia(self, cada_seg):
+        self.avisar(f"vigilancia automatica activada cada {cada_seg} s en grupo 'rescate'")
+        while self._vigilando:
+            time.sleep(cada_seg)
+            if not self._vigilando:
+                break
+            try:
+                datos = self.sensor.leer()
+                futuro = self.nodo.enviar_tarea_async("clasificar_urgencia", datos, timeout=6.0)
+                r = futuro.result()
+                clase = r.get("clase")
+                if clase != "NORMAL_ESTABLE":
+                    alerta = f"[{clase}] {r.get('accion_recomendada')} (sensor en {self.nodo.nombre})"
+                    self.avisar(f"ALERTA DETECTADA: {alerta}")
+                    self.mandar_a_grupo("rescate", alerta)
+            except Exception:
+                pass
+
+    def conmutar_vigilancia(self, cada_seg=5.0):
+        if self._vigilando:
+            self._vigilando = False
+            print("  vigilancia automatica detenida")
+        else:
+            self._vigilando = True
+            self.en_segundo_plano(self._bucle_vigilancia, cada_seg)
+
+    def simular_emergencia(self, modo):
+        try:
+            m = self.sensor.simular(modo)
+            print(f"  simulacion activada: {m.upper()}")
+            self.mostrar_sensor()
+        except ValueError as e:
+            print(f"  {e}")
 
     def ejecutar_estres(self, valores):
         try:
@@ -462,6 +562,8 @@ def main():
         app.consola()
     finally:
         print("\nsaliendo, avisando a los demas...")
+        app._vigilando = False
+        app.sensor.detener()
         app.nodo.detener()
 
 

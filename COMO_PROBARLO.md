@@ -200,6 +200,67 @@ Para verlo con interfaz gráfica, Wireshark sobre `bat0` con el filtro
 
 ---
 
+## Nivel 4 — Telemetría ESP32 e Inferencia Distribuida de IA (Fase 3)
+
+Esta sección comprueba la integración de hardware de borde (ESP32) y la clasificación de emergencias con Inteligencia Artificial explicable (Árbol de Decisión CART).
+
+### 1. Conexión y lectura del sensor físico
+Conecte la ESP32 por USB al computador donde corre el nodo sensor. En la consola de `mensajeria.py`:
+
+```
+sensor
+```
+* **Salida esperada (con sensor físico conectado):**
+  ```
+  [Telemetria: esp32 (COM3 / /dev/ttyUSB0)]
+    Temperatura:        24.2 °C
+    Humedad del aire:   56.0 %
+    Humedad de suelo:   14.2 %  (ADC: 3540 - Seco / Aire)
+    Intensidad de luz:  185.0 lux
+  ```
+* Si la ESP32 no está conectada, el sistema entra en modo de **telemetría simulada** automáticamente para que las pruebas nunca se detengan.
+
+### 2. Inferencia distribuida de IA (`evaluar`)
+Escriba en cualquier nodo:
+```
+evaluar
+```
+1. El nodo toma la lectura actual (física o simulada).
+2. El planificador $F(i,j)$ elige al mejor nodo de la malla que ofrezca `clasificar_urgencia`.
+3. El resultado vuelve por TCP en sub-milisegundos:
+   ```
+   ================ DIAGNOSTICO DE EMERGENCIA (IA) ================
+   Clasificacion:       NORMAL_ESTABLE (91.3% confianza)
+   Accion Recomendada:  Monitoreo perimetral rutinario. Sin riesgo inminente.
+   Nodo Evaluador:      ea6fad2e (intentos: ea6fad2e)
+   ================================================================
+   ```
+
+### 3. Simulación de escenarios de desastre
+Para demostrar que el árbol de decisión clasifica correctamente las 5 categorías:
+```
+simular incendio
+evaluar
+```
+* Responderá: `ALERTA_INCENDIO (100.0% confianza)` — *¡Alerta crítica de fuego! Activar brigadas de extinción.*
+
+```
+simular escombros
+evaluar
+```
+* Responderá: `POSIBLE_ATRAPADO_ESCOMBROS (100.0% confianza)` — *Posible colapso estructural. Despachar rescatistas caninos.*
+
+Otros modos: `simular inundacion`, `simular calor`, `simular normal`.
+
+### 4. Vigilancia automática continua
+Para monitoreo desatendido que emite alertas automáticas al grupo multicast `"rescate"`:
+```
+vigilancia 3
+```
+Cada 3 segundos lee el sensor, evalúa con la red, y si detecta una emergencia grave (incendio, inundación, escombros) emite una alerta crítica que se proyecta en color rojo en todas las terminales que ejecuten `applications/monitor.py`. Para detenerlo, presione `Enter`.
+
+---
+
 ## La prueba que de verdad demuestra que funciona
 
 Todo lo anterior se podría lograr con una red normal. Lo que demuestra que la
@@ -255,6 +316,10 @@ restablece sola, sin que nadie configure nada.
 | Asignación de tareas | `calc 10 + 20`: responde 30 y dice qué nodo la ejecutó |
 | Archivos comprimidos | `archivo nodo-2 censo.txt` con un texto grande: dice "viajó comprimido en ... KB: 99 % menos" y llega idéntico. Con una foto `.jpg` va sin comprimir |
 | Reparto y costo | `estres 15` con `applications/monitor.py` abierto: cada nodo recibe una parte y se ve su CPU bajar |
+| Lectura ESP32 en vivo | `sensor` mostrando temperatura, humedad de aire, suelo calibrado y lux de la placa física |
+| Inferencia de IA distribuida | `evaluar` enviando telemetría por la malla; el mejor nodo responde diagnóstico y confianza |
+| Simulación de desastres | `simular incendio` o `escombros` y ver clasificar en `ALERTA_INCENDIO` o `POSIBLE_ATRAPADO_ESCOMBROS` |
+| Vigilancia perimetral continua | `vigilancia 3` en nodo sensor: al detectar emergencia grave, `applications/monitor.py` muestra alerta roja en vivo |
 | Reasignación | Ver abajo |
 
 ### La reasignación en vivo

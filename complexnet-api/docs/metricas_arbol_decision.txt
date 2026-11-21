@@ -1,0 +1,25 @@
+REPORTE EXPERIMENTAL DE CLASIFICACION - CORTE 3
+Modelo: Arbol de Decision (CART, Max Profundidad = 4)
+============================================================
+
+Precision Global (Accuracy): 97.50%
+
+Matriz de Confusion (Filas=Real, Columnas=Prediccion):
+                            [0] [1] [2] [3] [4]
+NORMAL_ESTABLE               84    0    0    0    0
+ALERTA_INCENDIO               0   82    0    0    0
+ALERTA_INUNDACION_LODO        1    0   72    0    0
+POSIBLE_ATRAPADO_ESCOMBROS    5    0    0   78    0
+ALERTA_CALOR_EXTREMO          4    0    0    0   74
+
+Metricas por Clase:
+  [0] NORMAL_ESTABLE:
+      Precision=89.4%, Recall=100.0%, F1-Score=0.944
+  [1] ALERTA_INCENDIO:
+      Precision=100.0%, Recall=100.0%, F1-Score=1.000
+  [2] ALERTA_INUNDACION_LODO:
+      Precision=100.0%, Recall=98.6%, F1-Score=0.993
+  [3] POSIBLE_ATRAPADO_ESCOMBROS:
+      Precision=100.0%, Recall=94.0%, F1-Score=0.969
+  [4] ALERTA_CALOR_EXTREMO:
+      Precision=100.0%, Recall=94.9%, F1-Score=0.974

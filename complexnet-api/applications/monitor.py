@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 
 from src.api import Nodo
-from src.communication import RESOURCE_UPDATE, malla
+from src.communication import APP_MSG, RESOURCE_UPDATE, malla
 
 DIFUSION_LOCAL = "127.255.255.255"
 PUERTO_TCP = 5009
@@ -116,7 +116,9 @@ class Monitor:
             nodo = Nodo(nombre, interfaz=interfaz, difusion=difusion,
                         puerto_tcp=puerto, servicios=[SERVICIO],
                         carpeta_logs=args.logs)
+            nodo.unirse_a_grupo("rescate")
             nodo.al_recibir(RESOURCE_UPDATE, self.al_llegar_recursos)
+            nodo.al_recibir(APP_MSG, self.al_llegar_mensaje_app)
             nodo.cuando_entre(self.al_entrar)
             nodo.cuando_sospeche(
                 lambda nid: self.anotar(f"{self.nombre_de(nid)} no responde: "
@@ -173,6 +175,14 @@ class Monitor:
         for tarea_id, (operacion, de) in antes.items():
             if tarea_id not in actuales:
                 self.anotar(f"{nombre} termino {operacion} (de {de})", VERDE)
+
+    def al_llegar_mensaje_app(self, m, ip_origen):
+        texto = str((m.payload or {}).get("texto", ""))
+        emisor = self.nombre_de(m.sender)
+        if "ALERTA" in texto or "INCENDIO" in texto or "INUNDACION" in texto or "ATRAPADO" in texto:
+            self.anotar(f"[{emisor}] {texto}", ROJO)
+        elif m.group:
+            self.anotar(f"[{emisor} en {m.group}] {texto}", AMARILLO)
 
     def aptitud(self, node_id):
         v = self.nodo.buscar(node_id)

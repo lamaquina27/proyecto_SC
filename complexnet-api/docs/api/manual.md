@@ -727,6 +727,28 @@ Todos los nodos que corran la aplicación registran la operación, así que
 cualquiera puede ejecutar un pedazo. El planificador reparte los pedazos según
 F(i,j), y si un nodo se cae a la mitad, su pedazo se reasigna solo.
 
+### 9.5 Aplicación 3: Inteligencia Artificial con Árbol de Decisión (`clasificar_urgencia`)
+
+Cumple el requisito de Inteligencia Artificial de la Fase 3 del curso. En un escenario de rescate y emergencias, un nodo sensor lee parámetros físicos (temperatura, humedad de aire, humedad de suelo y nivel de iluminación) desde una **extensión de hardware ESP32** conectada por USB (o telemetría simulada en nodos sin placa).
+
+```python
+from applications.arbol_decision import clasificar_urgencia
+
+with Nodo("nodo-sensor") as nodo:
+    # 1. Los nodos evaluadores registran la operación de IA
+    nodo.registrar_operacion("clasificar_urgencia", clasificar_urgencia)
+
+    # 2. El nodo sensor despacha la telemetría a la red
+    telemetria = {"temp": 62.0, "hum_aire": 14.0, "suelo": 8.0, "luz": 4800.0}
+    resultado = nodo.enviar_tarea("clasificar_urgencia", telemetria)
+
+    print("Diagnóstico:", resultado["clase"])              # ALERTA_INCENDIO
+    print("Acción:", resultado["accion_recomendada"])      # EVACUACION INMEDIATA...
+    print("Confianza:", f"{resultado['confianza']*100:.1f}%")
+```
+
+El planificador distribuido selecciona el nodo de la red con mejor $F(i,j)$ (mayor CPU/RAM libre y mejor enlace $TQ$). Si el nodo asignado se desconecta durante la evaluación, el `GestorRecuperacion` reasigna la tarea automáticamente a otro nodo sin perder la alerta.
+
 ## 10. Envío de archivos: `communication.ServicioArchivos` (`nodo.archivos`)
 
 El porqué está en `diseno.md`, decisión 23.

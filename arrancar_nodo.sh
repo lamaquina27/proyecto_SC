@@ -98,7 +98,7 @@ instalar_si_falta() {
     return 1
   fi
 }
-for p in libnl-3-200 libnl-genl-3-200 iw batctl; do
+for p in libnl-3-200 libnl-genl-3-200 iw batctl python3-serial; do
   instalar_si_falta "$p" || true
 done
 instalar_si_falta python3-psutil || echo "  (psutil es opcional: sin el, cpu y memoria salen en 0.5)"
