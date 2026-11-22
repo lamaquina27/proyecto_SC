@@ -26,8 +26,8 @@ src/
 | `api/` | `Nodo`, `Identidad` | Provee la interfaz pública de alto nivel para aplicaciones. Gestiona el ciclo de vida de los servicios de fondo y mantiene la persistencia del identificador único de nodo (`node_id`) entre reinicios. |
 | `communication/` | `EmisorMensajes`, `ReceptorMensajes`, `MallaBATMAN`, `GestorArchivos` | Gestiona sockets UDP para presencia y difusión (respetando MTU < 1400 bytes). Implementa sockets TCP con enmarcado por longitud de 4 bytes en formato big-endian para tareas y archivos binarios con compresión adaptativa `zlib`. |
 | `discovery/` | `GestorDescubrimiento`, `DirectorioVecinos`, `DetectorFallos` | Emite y procesa mensajes `HEARTBEAT` cada 5 segundos. Mantiene la tabla de vecinos activos y aplica el detector de fallos en dos umbrales: 15 s (`SOSPECHOSO`) y 30 s (`INACTIVO`). |
-| `resources/` | `GestorRecursos` | Mide periódicamente la carga de CPU, uso de RAM (vía `psutil`), calidad del enlace inalámbrico ($TQ/255$ desde B.A.T.M.A.N.) y disponibilidad del nodo para construir el vector normalizado $[C, M, B, R, A]$. |
-| `scheduler/` | `PlanificadorDistribuido` | Resuelve la asignación descentralizada de tareas calculando la función de aptitud $F(i,j)$ y seleccionando al candidato óptimo mediante $\arg\max_i F(i,j)$. |
+| `resources/` | `GestorRecursos` | Mide periódicamente la carga de CPU, uso de RAM (vía `psutil`), calidad del enlace inalámbrico (`TQ/255` desde B.A.T.M.A.N.) y disponibilidad del nodo para construir el vector normalizado `[C, M, B, R, A]`. |
+| `scheduler/` | `PlanificadorDistribuido` | Resuelve la asignación descentralizada de tareas calculando la función de aptitud `F(i, j)` y seleccionando al candidato óptimo mediante `argmax_i F(i, j)`. |
 | `tasks/` | `GestorTareas`, `GestorRecuperacion`, `Tarea` | Administra la máquina de estados de las tareas (`CREADA`, `ENVIADA`, `EN_EJECUCION`, `COMPLETADA`, `FALLIDA`). Detecta abortos de conexión y reasigna automáticamente tareas huérfanas a nodos alternativos. |
 | `monitoring/` | `RegistroEventos`, `RelojLamport` | Registra trazas de auditoría en formato JSONL y mantiene la sincronización de causalidad de eventos mediante relojes lógicos de Lamport, prescindiendo de servidores NTP. |
 
@@ -57,7 +57,7 @@ Todos los paquetes que viajan por la red utilizan una envoltura JSON unificada:
 
 ### Tipos de Mensajes Soportados:
 * `HEARTBEAT` (UDP Broadcast): Latido emitido cada 5 segundos con la lista de servicios y grupos del nodo.
-* `RESOURCE_UPDATE` (UDP Broadcast): Emisión periódica del vector de estado $[C, M, B, R, A]$.
+* `RESOURCE_UPDATE` (UDP Broadcast): Emisión periódica del vector de estado `[C, M, B, R, A]`.
 * `TASK_REQUEST` (UDP Broadcast): Búsqueda reactiva de nodos que ofrezcan una operación no encontrada en la caché local.
 * `NODE_STATUS` (UDP Broadcast): Aviso de transición de estado de un vecino (`SOSPECHOSO` o `INACTIVO`).
 * `APP_MSG` (UDP Broadcast / Multicast): Mensajes de texto generales o filtrados por grupos temáticos (p. ej. `"rescate"`).
@@ -123,7 +123,7 @@ finally:
 | Archivo | Rol | Descripción |
 |---|---|---|
 | `mensajeria.py` | Consola Principal | Interfaz CLI interactiva para brigadistas. Permite enviar mensajes directos, difundir alertas por grupo, transferir archivos, repartir tareas matemáticas, estresar núcleos y solicitar diagnósticos de emergencia. |
-| `monitor.py` | Panel de Control | Monitor en vivo para terminal que visualiza los nodos conectados, sus vectores de recursos $[C, M, B, R, A]$, las tareas activas y las alertas críticas recibidas en el canal `"rescate"`. |
+| `monitor.py` | Panel de Control | Monitor en vivo para terminal que visualiza los nodos conectados, sus vectores de recursos `[C, M, B, R, A]`, las tareas activas y las alertas críticas recibidas en el canal `"rescate"`. |
 | `sensor_emergencia.py` | Pasarela de Borde | Administra la conexión serial con la ESP32 física a 115200 baudios, calibra la lectura del sensor de suelo capacitivo y activa automáticamente el modo simulador con fallbacks si no hay hardware conectado. |
 | `arbol_decision.py` | Motor de IA | Implementación nativa del clasificador de urgencias mediante Árbol de Decisión CART. Opera sin dependencias externas en sub-milisegundos evaluando temperatura, humedad de aire, suelo y luminosidad. |
 | `operaciones.py` | Tareas de Cómputo | Tareas matemáticas distribuidas analizadas de forma segura mediante el árbol de sintaxis abstracta (`ast`, sin `eval`) y tareas sintéticas de estrés de CPU para pruebas de balanceo. |

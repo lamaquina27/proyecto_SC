@@ -17,9 +17,11 @@
 * **Capa 3 (Servicios Distribuidos):**
   * Descubrimiento de nodos (`HELLO`, `HELLO_ACK`, `HEARTBEAT`).
   * Vigilancia de fallos con dos umbrales: 15 s (`SOSPECHOSO`) y 30 s (`INACTIVO`).
-  * Anuncio y actualización periódica del vector de recursos: $S_i(t) = [C_i, M_i, B_i, R_i, A_i]$.
+  * Anuncio y actualización periódica del vector de recursos: `S_i(t) = [C_i, M_i, B_i, R_i, A_i]`.
   * Planificador distribuido basado en la función de aptitud:
-    $$F(i, j) = w_1 C_i + w_2 M_i + w_3 B_i + w_4 R_i - w_5 L_i$$
+    ```
+    F(i, j) = w1 * Ci + w2 * Mi + w3 * Bi + w4 * Ri - w5 * Li
+    ```
   * Gestor de tareas con colas y reasignación automática ante caídas de nodos ejecutores (`GestorRecuperacion`).
 * **Capa 4 (API de Alto Nivel):** Fachada `Nodo` que abstrae el manejo de sockets, puertos y protocolos hacia aplicaciones descentralizadas.
 
@@ -41,7 +43,7 @@
 
 1. **Aplicación de Inteligencia Artificial (Aplicación 3):**
    * Se requiere integrar un modelo formal de IA. La rúbrica autoriza: *Regresión Lineal, Regresión Logística, SVM, Árbol de Decisión o MLP*.
-   * Debe justificar los 5 puntos: distribución de datos/tareas, asignación con $F(i,j)$, mensajes intercambiados, tolerancia a fallos y métricas.
+   * Debe justificar los 5 puntos: distribución de datos/tareas, asignación con `F(i, j)`, mensajes intercambiados, tolerancia a fallos y métricas.
 2. **Aplicación de Monitoreo Distribuido (Aplicación 1):**
    * Monitoreo de variables físicas en red descentralizada y sistema distribuido de alertas.
 3. **Métricas Experimentales:**

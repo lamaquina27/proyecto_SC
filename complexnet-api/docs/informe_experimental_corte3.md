@@ -30,31 +30,35 @@ En ComplexNet API, la computación se modela de manera **completamente descentra
 ### Protocolo de Asignación en 2 Fases:
 1. **Verificación de Capacidades en Caché Local:** El nodo solicitante consulta su tabla de vecinos (`DirectorioVecinos`). Identifica cuáles nodos activos tienen registrada la operación requerida (por ejemplo, `clasificar_urgencia` o `calcular`).
 2. **Descubrimiento Reactivo (`TASK_REQUEST`):** Si ningún vecino conocido reporta soporte para la operación, el solicitante emite un broadcast UDP `TASK_REQUEST` a toda la malla. Los nodos con capacidad disponible responden con `HELLO_ACK` actualizando sus servicios.
-3. **Despacho Punto a Punto (`TASK_ASSIGN`):** Seleccionado el mejor candidato mediante el planificador $F(i,j)$, la tarea se serializa en JSON y se envía directamente por socket TCP con enmarcado por longitud (cabecera fija de 4 bytes en formato *big-endian*).
+3. **Despacho Punto a Punto (`TASK_ASSIGN`):** Seleccionado el mejor candidato mediante el planificador `F(i, j)`, la tarea se serializa en JSON y se envía directamente por socket TCP con enmarcado por longitud (cabecera fija de 4 bytes en formato *big-endian*).
 4. **Respuesta (`TASK_RESULT`):** El nodo ejecutor procesa la rutina en un hilo de trabajo independiente para no bloquear el transporte de red, computa el resultado y lo retorna al emisor mediante un mensaje `TASK_RESULT`.
 
 ---
 
-## 2. Asignación de Recursos Mediante Optimización $F(i, j)$
+## 2. Asignación de Recursos Mediante Optimización F(i, j)
 
-El planificador distribuido resuelve un problema de optimización multi-criterio en tiempo real. Cuando el nodo $j$ necesita delegar una tarea, evalúa la función de aptitud $F(i, j)$ sobre cada nodo candidato $i \in V$:
+El planificador distribuido resuelve un problema de optimización multi-criterio en tiempo real. Cuando un nodo emisor necesita delegar una tarea, evalúa la función de aptitud `F(i, j)` sobre cada nodo candidato:
 
-$$F(i, j) = w_1 \cdot C_i + w_2 \cdot M_i + w_3 \cdot B_i + w_4 \cdot R_i - w_5 \cdot L_i$$
+```
+F(i, j) = w1 * Ci + w2 * Mi + w3 * Bi + w4 * Ri - w5 * Li
+```
 
-Donde las variables corresponden al vector de estado normalizado $[0, 1]$ publicado periódicamente por cada nodo:
-* **$C_i$ (Capacidad de CPU disponible):** $1.0 - \text{carga}$.
-* **$M_i$ (Memoria RAM disponible):** $\text{RAM}_{\text{libre}} / \text{RAM}_{\text{total}}$.
-* **$B_i$ (Calidad de Enlace de Red):** Obtenida directamente de la métrica $TQ$ (Transmit Quality) provista por el protocolo B.A.T.M.A.N. Advanced: $B_i = TQ / 255.0$.
-* **$R_i$ (Reputación Histórica):** Proporción de tareas completadas exitosamente sin errores ni abandonos: $R_i = \min(R_{\text{publicado}}, R_{\text{observado}})$.
-* **$L_i$ (Carga de Tareas en Curso):** Penalización por saturación concurrente: $L_i = \min(1.0, \text{tareas} \times 0.25)$.
+Donde las variables corresponden al vector de estado normalizado `[0, 1]` publicado periódicamente por cada nodo:
+* **Ci (Capacidad de CPU disponible):** `1.0 - carga_cpu`.
+* **Mi (Memoria RAM disponible):** `RAM_libre / RAM_total`.
+* **Bi (Calidad de Enlace de Red):** Obtenida directamente de la métrica `TQ` (Transmit Quality) provista por el protocolo B.A.T.M.A.N. Advanced: `Bi = TQ / 255.0`.
+* **Ri (Reputación Histórica):** Proporción de tareas completadas exitosamente sin errores ni abandonos: `Ri = min(R_publicado, R_observado)`.
+* **Li (Carga de Tareas en Curso):** Penalización por saturación concurrente: `Li = min(1.0, tareas_activas * 0.25)`.
 
 ### Configuración de Pesos para Clasificación de Emergencias:
 Para tareas de Inteligencia Artificial (latencia crítica y sensibilidad a la conectividad de campo):
-$$\{w_1 = 0.25,\; w_2 = 0.15,\; w_3 = 0.35,\; w_4 = 0.15,\; w_5 = 0.10\}$$
+`{w1 = 0.25, w2 = 0.15, w3 = 0.35, w4 = 0.15, w5 = 0.10}`
 
-Se prioriza la calidad del enlace inalámbrico ($B_i$) para minimizar la pérdida de paquetes en el borde del desastre, complementado con disponibilidad de CPU ($C_i$). El nodo ejecutor final se elige por:
+Se prioriza la calidad del enlace inalámbrico (`Bi`) para minimizar la pérdida de paquetes en el borde del desastre, complementado con disponibilidad de CPU (`Ci`). El nodo ejecutor final se elige por:
 
-$$i^* = \arg\max_{i \in V} F(i, j)$$
+```
+nodo_optimo = argmax_i F(i, j)
+```
 
 ---
 
@@ -86,10 +90,10 @@ Todas las comunicaciones en ComplexNet API se unifican bajo una envoltura JSON e
 |---|---|---|
 | `HELLO` / `HELLO_ACK` | UDP Broadcast | Descubrimiento inicial mutuo entre nodos al encender la interfaz. |
 | `HEARTBEAT` | UDP Broadcast (cada 5 s) | Latido de vida que actualiza el estado activo y la lista de servicios. |
-| `RESOURCE_UPDATE` | UDP Broadcast (cada 5 s) | Difusión del vector de recursos $[C, M, B, R, A]$. |
+| `RESOURCE_UPDATE` | UDP Broadcast (cada 5 s) | Difusión del vector de recursos `[C, M, B, R, A]`. |
 | `NODE_STATUS` | UDP Broadcast | Notificación cuando un vecino cambia de estado (`SOSPECHOSO`, `INACTIVO`). |
 | `TASK_REQUEST` | UDP Broadcast | Petición reactiva para descubrir nodos con una capacidad específica. |
-| `TASK_ASSIGN` | TCP Unicast Enmarcado | Asignación formal de la tarea al nodo con mayor $F(i,j)$. |
+| `TASK_ASSIGN` | TCP Unicast Enmarcado | Asignación formal de la tarea al nodo con mayor aptitud `F(i, j)`. |
 | `TASK_RESULT` | TCP Unicast Enmarcado | Retorno del resultado computado al nodo solicitante. |
 | `APP_MSG` (Multicast) | UDP Difusión Filtrada | Alertas perimetrales al grupo temático `"rescate"`. |
 | `FILE_CHUNK` | TCP Unicast Enmarcado | Envío de archivos binarios o comprimidos por zlib. |
@@ -101,16 +105,16 @@ Todas las comunicaciones en ComplexNet API se unifican bajo una envoltura JSON e
 El sistema aborda la inestabilidad intrínseca de las redes ad hoc mediante dos subsistemas complementarios:
 
 ### A. Detector de Fallos en Dos Umbrales
-* **Umbral $\tau_1 = 15\text{ s}$ (`SOSPECHOSO`):** Si no se reciben paquetes de un nodo en 15 s, se suspende la asignación de nuevas tareas hacia él, pero se mantienen sus rutas en espera de recuperación transitoria.
-* **Umbral $\tau_2 = 30\text{ s}$ (`INACTIVO`):** Se confirma la caída o desconexión del nodo. Se emite un aviso `NODE_STATUS` y se transfieren sus tareas pendientes al gestor de recuperación.
+* **Umbral tau_1 = 15 s (`SOSPECHOSO`):** Si no se reciben paquetes de un nodo en 15 s, se suspende la asignación de nuevas tareas hacia él, pero se mantienen sus rutas en espera de recuperación transitoria.
+* **Umbral tau_2 = 30 s (`INACTIVO`):** Se confirma la caída o desconexión del nodo. Se emite un aviso `NODE_STATUS` y se transfieren sus tareas pendientes al gestor de recuperación.
 
 ### B. Gestor de Recuperación (`GestorRecuperacion`)
 Cuando un nodo ejecutor muere en medio de un cómputo:
 1. El solicitante intercepta el cierre abrupto del socket TCP o la notificación de `INACTIVO`.
 2. La tarea pasa de estado `EN_EJECUCION` a `FALLIDA`.
 3. Se incrementa el contador de reintentos (`reintentos < 3`).
-4. Se penaliza la reputación observada del nodo caído ($R_{\text{observado}} \leftarrow R_{\text{observado}} - 0.2$).
-5. Se invoca nuevamente al planificador $F(i, j)$, el cual excluye al nodo inactivo y selecciona al segundo mejor candidato disponible.
+4. Se penaliza la reputación observada del nodo caído (`R_observado = R_observado - 0.2`).
+5. Se invoca nuevamente al planificador `F(i, j)`, el cual excluye al nodo inactivo y selecciona al segundo mejor candidato disponible.
 6. La tarea se retransmite sin intervención humana y el resultado final se entrega exitosamente.
 
 ---
@@ -119,7 +123,9 @@ Cuando un nodo ejecutor muere en medio de un cómputo:
 
 Para la clasificación de emergencias en tiempo real, se entrenó y desplegó un Árbol de Decisión CART (Classification and Regression Trees) optimizado mediante el criterio de **impureza de Gini**:
 
-$$I_G(p) = 1 - \sum_{i=1}^{K} p_i^2$$
+```
+Impureza de Gini: I_G(p) = 1 - sum(p_i^2)
+```
 
 ### A. Justificación Frente a Otras Alternativas
 
@@ -171,5 +177,5 @@ TOTAL PREDICCIÓN:      94       82         72         78       74      400
 ## 6. Conclusiones
 
 1. **Autoorganización Exitosa:** El protocolo B.A.T.M.A.N. Advanced combinado con la capa de descubrimiento ComplexNet permitió converger la topología de red en menos de 10 segundos tras el encendido de los nodos, sin configuración de routers centralizados.
-2. **Eficiencia en Recursos Críticos:** El árbol de decisión nativo demostró una precisión superior al 97% con un coste de cómputo despreciable ($<0.2\text{ ms}$), garantizando que los equipos de rescate operen fluidamente en memorias RAM limitadas.
+2. **Eficiencia en Recursos Críticos:** El árbol de decisión nativo demostró una precisión superior al 97% con un coste de cómputo despreciable (< 0.2 ms), garantizando que los equipos de rescate operen fluidamente en memorias RAM limitadas.
 3. **Resiliencia Comprobada:** Ante la desconexión intencionada de un nodo ejecutor en plena inferencia, el sistema reasignó la tarea en un tiempo medio inferior a 1.2 segundos sin pérdida de información de telemetría.

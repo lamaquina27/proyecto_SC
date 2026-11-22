@@ -38,7 +38,7 @@ Si estás probando en computadores físicos con Linux y B.A.T.M.A.N. Advanced:
    ```bash
    batctl meshif bat0 originators
    ```
-   *Resultado esperado:* Lista todos los nodos de la red, indicando el siguiente salto y la métrica de calidad de enlace $TQ$ (idealmente 255/255).
+   *Resultado esperado:* Lista todos los nodos de la red, indicando el siguiente salto y la métrica de calidad de enlace TQ (idealmente 255/255).
 5. **Comprobar conectividad IP básica:**
    ```bash
    ping -c 3 10.10.0.2
@@ -143,7 +143,7 @@ Para que la red clasifique el estado ambiental mediante el Árbol de Decisión C
    ```
 2. **Proceso interno:**
    * El nodo emisor empaqueta su telemetría actual.
-   * El planificador evalúa la función de aptitud $F(i, j)$ sobre todos los nodos vecinos que ofrecen el servicio `clasificar_urgencia`.
+   * El planificador evalúa la función de aptitud `F(i, j)` sobre todos los nodos vecinos que ofrecen el servicio `clasificar_urgencia`.
    * Envía la petición por TCP al nodo seleccionado.
    * El nodo ejecutor procesa las reglas del árbol en sub-microsegundos y devuelve la respuesta.
 3. **Salida esperada en condiciones normales:**
@@ -215,7 +215,7 @@ Para mantener monitoreo desatendido en el perímetro de rescate:
    ```
    calc (50 * 4) + sqrt(144)
    ```
-   *El planificador asigna la operación al mejor nodo según $F(i,j)$. El nodo ejecutor evalúa la expresión mediante análisis de sintaxis abstracta (AST seguro, sin `eval`) y retorna `212.0`.*
+   *El planificador asigna la operación al mejor nodo según `F(i, j)`. El nodo ejecutor evalúa la expresión mediante análisis de sintaxis abstracta (AST seguro, sin `eval`) y retorna `212.0`.*
 
 2. **Estrés de carga computacional (`estres`):**
    ```

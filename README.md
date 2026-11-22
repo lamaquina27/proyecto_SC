@@ -92,7 +92,7 @@ La baliza sensorial física utiliza un microcontrolador de bajo consumo y tres m
 
 > **Calibración del sensor de suelo:** El sensor capacitivo entrega valores ADC de 12 bits (rango 0 a 4095). En aire seco reporta valores cercanos a `3900` (humedad 0%), mientras que sumergido en agua reporta alrededor de `1400` (humedad 100%). La conversión a porcentaje se realiza aplicando:
 >
-> $$\text{Humedad (\%)} = \frac{3900 - \text{ADC}}{3900 - 1400} \times 100$$
+> `Humedad (%) = ((3900 - ADC) / (3900 - 1400)) * 100`
 
 ---
 
@@ -123,22 +123,24 @@ El sistema no utiliza clientes ni servidores fijos. Cada computador ejecuta una 
 
 ### Protocolo de Red: B.A.T.M.A.N. Advanced
 En lugar de enrutar paquetes en capa 3 con tablas estáticas, se emplea **B.A.T.M.A.N. Advanced** (*Better Approach To Mobile Adhoc Networking*), un módulo del kernel de Linux que crea un conmutador virtual ethernet (`bat0`) sobre interfaces Wi-Fi en modo ad hoc (IBSS):
-* Cada nodo propaga paquetes de anuncio de origen (OGM) para medir la calidad del enlace ($TQ$, 0 a 255).
+* Cada nodo propaga paquetes de anuncio de origen (OGM) para medir la calidad del enlace (TQ, rango de 0 a 255).
 * Los nodos retransmiten automáticamente los paquetes entre sí si el destino no está al alcance de radio directo (enrutamiento multi-salto transparente).
 
 ### Planificación y Asignación de Tareas: Función de Aptitud
 Cuando un nodo necesita delegar una tarea computacional (como clasificar una emergencia o resolver un cálculo), evalúa a todos sus vecinos activos mediante una función de aptitud multi-criterio:
 
-$$F(i, j) = w_1 \cdot C_i + w_2 \cdot M_i + w_3 \cdot B_i + w_4 \cdot R_i - w_5 \cdot L_i$$
+```
+F(i, j) = w1 * Ci + w2 * Mi + w3 * Bi + w4 * Ri - w5 * Li
+```
 
 Donde:
-* **$C_i$**: Capacidad de CPU libre ($1.0 - \text{carga\_cpu}$).
-* **$M_i$**: Memoria RAM libre disponible.
-* **$B_i$**: Calidad del enlace inalámbrico ($TQ / 255$).
-* **$R_i$**: Confiabilidad histórica de tareas exitosas.
-* **$L_i$**: Carga de tareas actualmente en ejecución en ese nodo.
+* **Ci**: Capacidad de CPU libre (`1.0 - carga_cpu`).
+* **Mi**: Memoria RAM libre disponible (`memoria_libre / memoria_total`).
+* **Bi**: Calidad del enlace inalámbrico (métrica de calidad `TQ / 255` provista por BATMAN).
+* **Ri**: Confiabilidad histórica de tareas completadas exitosamente.
+* **Li**: Carga de tareas actualmente en ejecución en ese nodo.
 
-El nodo con mayor valor $F(i, j)$ recibe la tarea por una conexión TCP directa.
+El nodo con mayor valor `F(i, j)` recibe la tarea por una conexión TCP directa.
 
 ---
 
@@ -157,11 +159,11 @@ El modelo recibe 4 variables numéricas normalizadas por lectura:
 
 | Diagnóstico | Condiciones Típicas de Activación | Acción Recomendada por el Sistema |
 |---|---|---|
-| `NORMAL_ESTABLE` | Temperatura 15-32 °C, humedad 40-70%, iluminación ambiental normal | Monitoreo perimetral rutinario sin riesgo. |
-| `ALERTA_INCENDIO` | Humedad de aire $\le 24.4\%$, temperatura elevada | Evacuación preventiva y despacho de brigada forestal. |
-| `ALERTA_INUNDACION_LODO` | Humedad de suelo $> 84.8\%$ con humedad atmosférica alta | Riesgo de alud o desbordamiento; evacuar a cota alta. |
-| `POSIBLE_ATRAPADO_ESCOMBROS` | Iluminación extrema baja ($\le 2.75\text{ lux}$) con suelo no saturado | Prioridad de búsqueda canina en zona de derrumbe. |
-| `ALERTA_CALOR_EXTREMO` | Temperatura $> 36.3 °C$ con aire seco | Hidratación obligatoria y rotación de brigadistas. |
+| `NORMAL_ESTABLE` | Temperatura 15 a 32 °C, humedad 40 a 70%, iluminación ambiental normal | Monitoreo perimetral rutinario sin riesgo. |
+| `ALERTA_INCENDIO` | Humedad de aire <= 24.4%, temperatura elevada | Evacuación preventiva y despacho de brigada forestal. |
+| `ALERTA_INUNDACION_LODO` | Humedad de suelo > 84.8% con humedad atmosférica alta | Riesgo de alud o desbordamiento; evacuar a cota alta. |
+| `POSIBLE_ATRAPADO_ESCOMBROS` | Iluminación extrema baja (<= 2.75 lux) con suelo no saturado | Prioridad de búsqueda canina en zona de derrumbe. |
+| `ALERTA_CALOR_EXTREMO` | Temperatura > 36.3 °C con aire seco | Hidratación obligatoria y rotación de brigadistas. |
 
 ### ¿Por qué se eligió un Árbol de Decisión?
 1. **Explicabilidad (XAI):** En situaciones de emergencia, un diagnóstico no puede provenir de una "caja negra" incomprensible. El árbol genera reglas lógicas directas que los rescatistas pueden auditar e inspeccionar.
@@ -204,7 +206,7 @@ Para facilitar el desarrollo y permitir pruebas completas cuando no se cuenta co
 * Permite inyectar escenarios de desastre controlados mediante comandos de consola:
   * `simular incendio`: Genera valores con temperatura alta y aire seco.
   * `simular inundacion`: Genera suelo saturado de agua.
-  * `simular escombros`: Genera oscuridad total ($\le 2\text{ lux}$) con suelo seco.
+  * `simular escombros`: Genera oscuridad total (<= 2 lux) con suelo seco.
   * `simular calor`: Genera temperatura elevada con humedad media.
   * `simular normal`: Restablece lecturas ambientales estándar.
 
@@ -290,7 +292,7 @@ Una vez iniciada la consola interactiva `mensajeria.py`, los siguientes comandos
 * `msg <nodo> <mensaje>`: Mensaje privado unicast por TCP.
 * `unir rescate`: Se suscribe al grupo temático `"rescate"`.
 * `grupo rescate <alerta>`: Envía mensaje filtrado solo a miembros del grupo.
-* `calc (10 + 20) * 2`: Resuelve una expresión matemática delegándola al nodo con mejor $F(i, j)$.
+* `calc (10 + 20) * 2`: Resuelve una expresión matemática delegándola al nodo con mejor aptitud F(i, j).
 * `estres 15 4`: Genera 4 subprocesos de carga de CPU repartidos entre los nodos activos.
 
 Para un recorrido detallado paso a paso de cada verificación, consulta [`COMO_PROBARLO.md`](COMO_PROBARLO.md).
@@ -304,7 +306,7 @@ Para mantener total transparencia técnica, se diferencian claramente los result
 ### Lo que ha sido comprobado en pruebas físicas:
 1. **Lectura física de sensores:** La ESP32-S3 lee de forma continua los 4 sensores (DHT11, sensor capacitivo y BH1750) y los entrega mediante puerto serial al computador conectado.
 2. **Intercambiabilidad de hardware:** Conectar físicamente la ESP32 a cualquiera de los dos computadores probados funciona sin requerir reconfiguración de software.
-3. **Malla B.A.T.M.A.N. entre dos computadores:** Dos computadores portátiles con Ubuntu se enlazan en modo ad hoc (`bat0`), reconociéndose como vecinos en `batctl meshif bat0 neighbors` con métrica de calidad de enlace $TQ = 255/255$.
+3. **Malla B.A.T.M.A.N. entre dos computadores:** Dos computadores portátiles con Ubuntu se enlazan en modo ad hoc (`bat0`), reconociéndose como vecinos en `batctl meshif bat0 neighbors` con métrica de calidad de enlace TQ = 255/255.
 4. **Transporte de red bajo estrés:** Prueba de carga con 494 mensajes enviados y 502 recibidos, con 0 descartados y 0 fallos de transporte.
 5. **Comportamiento ante luz variable:** Comprobado físicamente con mediciones en oscuridad total, luz ambiente interior (~150-200 lux) y linterna directa (>2000 lux).
 6. **Inferencia de IA en sub-milisegundo:** Verificado mediante `time.perf_counter()` con tiempos de ejecución de ~0.0008 ms por inferencia.
@@ -312,7 +314,7 @@ Para mantener total transparencia técnica, se diferencian claramente los result
 ### Limitaciones conocidas y aspectos por mejorar:
 1. **Detección de escombros basada en luz:** La regla `luz <= 2.75 lux` fue deducida a partir de datos sintéticos donde el enterramiento bajo escombros implica oscuridad. En un entorno físico real, **estar en un cuarto oscuro, de noche o tapar el sensor con la mano dispara esta alerta**. La oscuridad es un indicio de confinamiento, pero no constituye prueba de vida humana atrapada. En versiones futuras debe combinarse con sensores de vibración, micrófonos acústicos o sensores de CO2.
 2. **Dependencia de calibración del suelo:** La humedad del suelo depende del tipo de sustrato (arena, tierra negra o escombros). Si los umbrales de referencia `3900` y `1400` varían por salinidad o tipo de terreno, la conversión a porcentaje requerirá recalibración previa.
-3. **Topologías de más de 2 nodos físicos:** La arquitectura y el planificador están diseñados para $N$ nodos y han sido validados con 3 nodos en entornos automatizados e integración local. Las pruebas físicas de campo hasta la fecha se realizaron con 2 computadores y 1 baliza ESP32.
+3. **Topologías de más de 2 nodos físicos:** La arquitectura y el planificador están diseñados para N nodos y han sido validados con 3 nodos en entornos automatizados e integración local. Las pruebas físicas de campo hasta la fecha se realizaron con 2 computadores y 1 baliza ESP32.
 4. **Tolerancia a fallos ante apagado abrupto:** La reasignación automática de tareas huérfanas ante la caída de un nodo está implementada y aprobada en las suites de pruebas unitarias (`test_ia_urgencias.py`, `test_tareas.py`); su validación ante el apagado físico repentino de un portátil durante una inferencia en vivo en la malla real sigue en proceso de homologación.
 
 ---

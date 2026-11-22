@@ -747,7 +747,7 @@ with Nodo("nodo-sensor") as nodo:
     print("Confianza:", f"{resultado['confianza']*100:.1f}%")
 ```
 
-El planificador distribuido selecciona el nodo de la red con mejor $F(i,j)$ (mayor CPU/RAM libre y mejor enlace $TQ$). Si el nodo asignado se desconecta durante la evaluación, el `GestorRecuperacion` reasigna la tarea automáticamente a otro nodo sin perder la alerta.
+El planificador distribuido selecciona el nodo de la red con mejor `F(i, j)` (mayor CPU/RAM libre y mejor enlace `TQ`). Si el nodo asignado se desconecta durante la evaluación, el `GestorRecuperacion` reasigna la tarea automáticamente a otro nodo sin perder la alerta.
 
 ## 10. Envío de archivos: `communication.ServicioArchivos` (`nodo.archivos`)
 
