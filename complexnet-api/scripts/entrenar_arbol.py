@@ -326,6 +326,26 @@ def _evaluar_arbol(temp, hum_aire, suelo, luz):
 {arbol_codigo}
 
 
+# Constantes de calibracion provisional del sensor capacitivo de suelo (ADC 12 bits)
+VALOR_ADC_SECO = 3900.0    # Lectura del sensor en aire / seco total (0%)
+VALOR_ADC_MOJADO = 1400.0  # Lectura del sensor sumergido / mojado (100%)
+
+
+def calibrar_suelo_adc(valor, adc_seco=VALOR_ADC_SECO, adc_mojado=VALOR_ADC_MOJADO):
+    """
+    Convierte lectura ADC (0-4095) del sensor capacitivo a porcentaje (0-100%).
+    Escala inversa: mayor valor ADC = menor humedad (seco).
+    Acota estrictamente el porcentaje resultante entre 0.0 y 100.0%.
+    """
+    if valor is None:
+        return 40.0
+    val = float(valor)
+    if val <= 100.0:
+        return round(max(0.0, min(100.0, val)), 1)
+    pct = 100.0 * (adc_seco - val) / (adc_seco - adc_mojado)
+    return round(max(0.0, min(100.0, pct)), 1)
+
+
 def clasificar_urgencia(datos):
     """
     Operacion distribuida registrada en ComplexNet API.
@@ -335,16 +355,11 @@ def clasificar_urgencia(datos):
         temp = float(datos["temp"] if datos.get("temp") is not None else 22.0)
         hum_aire = float(datos["hum_aire"] if datos.get("hum_aire") is not None else 50.0)
         suelo_val = datos.get("suelo")
-        if suelo_val is None:
-            suelo = 40.0
-        elif float(suelo_val) > 100.0:
-            adc = float(suelo_val)
-            suelo = max(0.0, min(100.0, 100.0 * (1.0 - (adc - 1200.0) / 2895.0)))
-        else:
-            suelo = float(suelo_val)
+        suelo = calibrar_suelo_adc(suelo_val)
         luz = float(datos["luz"] if datos.get("luz") is not None else 1000.0)
     elif isinstance(datos, (list, tuple)):
-        temp, hum_aire, suelo, luz = [float(x) for x in datos[:4]]
+        temp, hum_aire, suelo_raw, luz = [float(x) for x in datos[:4]]
+        suelo = calibrar_suelo_adc(suelo_raw)
     else:
         raise ValueError(f"formato de datos invalido: {{datos}}")
 

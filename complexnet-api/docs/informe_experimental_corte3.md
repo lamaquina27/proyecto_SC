@@ -132,36 +132,39 @@ $$I_G(p) = 1 - \sum_{i=1}^{K} p_i^2$$
 
 ### B. Métricas Globales de Rendimiento
 
-El modelo fue validado contra un conjunto de prueba independiente de 400 muestras no vistas durante el entrenamiento:
+El modelo fue validado contra un conjunto de prueba independiente de **400 muestras sintéticas** (partición 80/20 sobre un dataset de 2,000 registros generados a partir de límites físicos de desastres):
 
-* **Muestras Totales de Prueba:** 400
+* **Muestras Totales de Prueba:** 400 registros sintéticos
 * **Predicciones Correctas:** 390
 * **Exactitud Global (Accuracy):** **97.50%**
-* **Tiempo Promedio de Inferencia:** **0.14 ms por lectura**
+* **Tiempo Promedio de Inferencia en CPU:** **0.0003 ms (0.3 µs)** directo en árbol; **0.0013 ms (1.3 µs)** con desempaquetado de diccionario (verificado en `scripts/benchmark_ia.py`).
 
-### C. Matriz de Confusión
+> **Nota Metodológica Obligatoria:** Estas métricas se obtuvieron sobre un conjunto de datos sintético estructurado para simular rangos ambientales de emergencia. **No representan una validación estadística en desastres naturales reales**, donde variables no contempladas (polvo en suspensión, viento o sombras) pueden alterar las distribuciones de probabilidad.
+
+### C. Matriz de Confusión (Ejecución Reproducible)
 
 ```
-                        PREDICCIÓN DEL MODELO
-                 Normal  Incendio  Inundación  Escombros  Calor   TOTAL
+                            PREDICCIÓN DEL MODELO
+                     Normal  Incendio  Inundación  Escombros  Calor   TOTAL
 REAL:
-Normal             68        0         2           4        0       74
-Incendio            0       78         0           0        0       78
-Inundación          0        0        74           0        0       74
-Escombros           3        0         0          93        0       96
-Calor               1        0         0           0       77       78
+Normal                 84        0          0          0        0       84
+Incendio                0       82          0          0        0       82
+Inundación              1        0         72          0        0       73
+Escombros               5        0          0         78        0       83
+Calor                   4        0          0          0       74       78
+TOTAL PREDICCIÓN:      94       82         72         78       74      400
 ```
 
 ### D. Métricas Detalladas por Categoría
 
-| Clase de Emergencia | Precisión (Precision) | Exhaustividad (Recall) | Puntuación F1 (F1-Score) | Muestras (Soporte) |
+| Clase de Emergencia | Precisión (Precision) | Exhaustividad (Recall) | Puntuación F1 (F1-Score) | Muestras Reales (Soporte) |
 |---|:---:|:---:|:---:|:---:|
-| `NORMAL_ESTABLE` | 0.9444 | 0.9189 | 0.9315 | 74 |
-| `ALERTA_INCENDIO` | 1.0000 | 1.0000 | **1.0000** | 78 |
-| `ALERTA_INUNDACION_LODO` | 0.9737 | 1.0000 | **0.9867** | 74 |
-| `POSIBLE_ATRAPADO_ESCOMBROS` | 0.9588 | 0.9688 | **0.9637** | 96 |
-| `ALERTA_CALOR_EXTREMO` | 1.0000 | 0.9872 | **0.9935** | 78 |
-| **Promedio Ponderado** | **0.9754** | **0.9750** | **0.9751** | **400** |
+| `NORMAL_ESTABLE` | 89.4% (0.8936) | 100.0% (1.0000) | **0.944** | 84 |
+| `ALERTA_INCENDIO` | 100.0% (1.0000) | 100.0% (1.0000) | **1.000** | 82 |
+| `ALERTA_INUNDACION_LODO` | 100.0% (1.0000) | 98.6% (0.9863) | **0.993** | 73 |
+| `POSIBLE_ATRAPADO_ESCOMBROS` | 100.0% (1.0000) | 94.0% (0.9398) | **0.969** | 83 |
+| `ALERTA_CALOR_EXTREMO` | 100.0% (1.0000) | 94.9% (0.9487) | **0.974** | 78 |
+| **Promedio Ponderado** | **97.8%** | **97.5%** | **0.975** | **400** |
 
 ---
 

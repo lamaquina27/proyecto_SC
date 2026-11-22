@@ -168,8 +168,8 @@ El modelo recibe 4 variables numéricas normalizadas por lectura:
 2. **Cero Dependencias en RAM:** El modelo se entrena con un script offline (`entrenar_arbol.py`) usando el criterio de impureza de Gini y se exporta como funciones condicionales nativas en Python. No requiere librerías pesadas como `scikit-learn`, `torch` ni `tensorflow`, lo que permite cargarlo en sistemas efímeros en RAM.
 3. **Velocidad de Inferencia:** La evaluación completa toma **menos de 0.001 ms (sub-microsegundo)** en un procesador estándar, consumiendo recursos mínimos.
 
-### Métricas de Evaluación
-Evaluado sobre un conjunto de prueba independiente de **400 muestras** (partición 80/20 sobre 2,000 registros sintéticos calibrados según rangos físicos de desastre):
+### Métricas de Evaluación (Datos Sintéticos)
+Evaluado sobre un conjunto de prueba independiente de **400 muestras sintéticas** (partición 80/20 sobre 2,000 registros sintéticos calibrados según rangos físicos de desastre):
 * **Exactitud Global (Accuracy):** **97.50%** (390 de 400 aciertos).
 * **F1-Score por Clase:**
   * Incendio: **1.000**
@@ -178,7 +178,15 @@ Evaluado sobre un conjunto de prueba independiente de **400 muestras** (partici�
   * Escombros: **0.969**
   * Normal: **0.944**
 
-*(El reporte detallado y la matriz de confusión pueden consultarse en [`complexnet-api/docs/metricas_arbol_decision.txt`](complexnet-api/docs/metricas_arbol_decision.txt)).*
+> **Aviso de Rigor Metodológico:** La exactitud reportada fue obtenida estrictamente sobre el dataset sintético (`scripts/dataset_emergencias.csv`) para verificar la convergencia del algoritmo inductivo CART. **No representa una validación en escenarios reales de desastre**, donde factores físicos no modelados pueden afectar la clasificación.
+
+* **Benchmark de Inferencia en CPU (Reproducible):**
+  Medido mediante `scripts/benchmark_ia.py` (20,000 evaluaciones con calentamiento previo en Python 3.11):
+  * Inferencia pura directa en árbol (`_evaluar_arbol`): **0.0003 ms (0.3 µs)**
+  * Inferencia con validación y diccionario (`clasificar_urgencia`): **0.0013 ms (1.3 µs)**
+  * *Para reproducir la medición en tu equipo:* `python scripts/benchmark_ia.py`
+
+*(El reporte de métricas y la matriz de confusión pueden consultarse en [`complexnet-api/docs/metricas_arbol_decision.txt`](complexnet-api/docs/metricas_arbol_decision.txt) y el informe experimental en [`complexnet-api/docs/informe_experimental_corte3.md`](complexnet-api/docs/informe_experimental_corte3.md)).*
 
 ---
 
@@ -320,6 +328,11 @@ proyecto_SC/
 ├── arrancar_nodo.sh               # Script de arranque del nodo en Linux / toram
 ├── setup_adhoc.sh                 # Configuración de interfaces Wi-Fi y batman-adv
 │
+├── firmware_esp32/                # Código fuente C++ / PlatformIO para la baliza ESP32
+│   ├── platformio.ini             # Configuración de placa ESP32-S3 y librerías
+│   ├── README.md                  # Guía de conexiones y flasheo
+│   └── src/main.cpp               # Firmware que lee los sensores y emite JSON
+│
 └── complexnet-api/
     ├── README.md                  # Documentación técnica de la biblioteca API en Python
     ├── requirements.txt           # Dependencias básicas (psutil, pytest, pyserial)
@@ -340,16 +353,18 @@ proyecto_SC/
     │   ├── tasks/                 # Máquina de estados de tareas y reasignación
     │   └── monitoring/            # Registro distribuido JSONL y relojes de Lamport
     │
-    ├── scripts/                   # Herramientas de entrenamiento del modelo de IA
+    ├── scripts/                   # Herramientas de entrenamiento y benchmark
     │   ├── entrenar_arbol.py      # Algoritmo CART desde cero (Gini e inferencia)
+    │   ├── benchmark_ia.py        # Medición reproducible de tiempos de inferencia
     │   └── dataset_emergencias.csv# Dataset con 2,000 muestras para entrenamiento
     │
     ├── tests/                     # Suite de 128 pruebas automatizadas
     │   ├── test_ia_urgencias.py   # Pruebas de la IA distribuida y tolerancia a fallos
-    │   ├── test_api.py            # Pruebas de la fachada Nodo
+    │   ├── test_operaciones.py    # Pruebas de cálculo seguro AST y estrés CPU
     │   ├── test_tareas.py         # Pruebas del planificador y reasignación
-    │   ├── test_integracion.py    # Pruebas de interacción entre múltiples nodos
-    │   └── test_comunicacion.py   # Pruebas de transporte y protocolo
+    │   ├── test_archivos.py       # Pruebas de envío y compresión zlib
+    │   ├── test_comunicacion.py   # Pruebas de transporte y protocolo
+    │   └── test_integracion.py    # Pruebas de interacción entre múltiples nodos
     │
     ├── experimentos/              # Scripts y resultados de pruebas de red y estrés
     │   ├── medir.py               # Herramienta de medición de latencia y tráfico
@@ -358,7 +373,8 @@ proyecto_SC/
     └── docs/                      # Documentación complementaria y reportes
         ├── manual_desarrollador.md# Guía para extender la API con nuevas operaciones
         ├── diseno.md              # Registro de 29 decisiones arquitectónicas
-        └── metricas_arbol_decision.txt # Reporte numérico de evaluación del árbol
+        ├── metricas_arbol_decision.txt # Reporte numérico de evaluación del árbol
+        └── benchmark_ia.txt       # Resultados del benchmark reproducible en CPU
 ```
 
 ---

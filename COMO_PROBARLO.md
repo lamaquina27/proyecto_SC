@@ -265,7 +265,49 @@ Para verificar que los mensajes viajan realmente por la interfaz de red y compro
 
 ---
 
-## 12. Resolución de Problemas Frecuentes
+## 12. Fase 11 — Ejecución de Pruebas Automatizadas por Grupos
+
+El framework cuenta con 128 pruebas automatizadas. Para ejecutarlas de manera ordenada y reproducible:
+
+### A. Pruebas Unitarias de Algoritmos y Lógica (100% reproducibles en cualquier SO)
+No dependen de la red ni de sockets externos; validan matemáticas, seguridad AST, reglas del árbol y planificación:
+
+```bash
+cd complexnet-api
+
+# 1. Operaciones matematicas seguras (AST, funciones, primos, prevencion de inyeccion de codigo) - 29 pruebas
+python -m pytest tests/test_operaciones.py -v
+
+# 2. Inteligencia Artificial (clasificador CART, inferencia local y tolerancia a fallos) - 3 pruebas
+python -m pytest tests/test_ia_urgencias.py -v
+
+# 3. Logica del Planificador F(i,j) y vector de recursos - 11 pruebas unitarias
+python -m pytest tests/test_tareas.py -k "formula or aptitud or disponibilidad or carga or reputacion" -v
+
+# 4. Seguridad de archivos (bombas de compresion zlib, hashes SHA-256 y corrupcion) - 8 pruebas unitarias
+python -m pytest tests/test_archivos.py -k "rechaza or bomba or huella" -v
+```
+
+### B. Medición de Tiempos de Inferencia (Benchmark CPU)
+Para medir con precisión estadística el tiempo de inferencia del árbol CART en microsegundos sobre tu procesador:
+
+```bash
+python scripts/benchmark_ia.py
+```
+*Ejecuta 20,000 inferencias con calentamiento y reporta el promedio, mediana, mínimo y máximo en microsegundos.*
+
+### C. Pruebas de Integración y Malla Inalámbrica (Entorno Linux / ad hoc)
+Validan la convergencia de paquetes de difusión UDP (`127.255.255.255` o `bat0`) y el enrutamiento multi-nodo:
+
+```bash
+# Requiere Linux con interfaz de loopback lo o interfaz de malla bat0
+python -m pytest tests/test_comunicacion.py tests/test_descubrimiento.py tests/test_integracion.py -v
+```
+*(Nota técnica: En Windows, Microsoft Winsock restringe la difusión UDP en loopback, por lo que estas pruebas de sockets de red deben ejecutarse en Linux, en WSL2 o en la red real ad hoc).*
+
+---
+
+## 13. Resolución de Problemas Frecuentes
 
 | Síntoma | Causa Probable | Solución |
 |---|---|---|

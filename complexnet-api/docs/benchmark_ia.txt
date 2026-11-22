@@ -1,0 +1,6 @@
+BENCHMARK REPRODUCIBLE DE INFERENCIA IA - COMPLEXNET
+============================================================
+SO: Windows 10 | Python: 3.11.9
+Inferencia pura _evaluar_arbol (promedio): 0.2953 us (0.000295 ms)
+Inferencia con envoltura clasificar_urgencia: 1.2891 us (0.001289 ms)
+Muestras: 100,000 evaluaciones sobre CPU
