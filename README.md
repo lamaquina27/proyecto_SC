@@ -382,4 +382,4 @@ proyecto_SC/
 ---
 
 ## Licencia y Créditos
-Desarrollado como proyecto de investigación aplicada en redes inalámbricas descentralizadas y computación en el borde por **Felipe Morales Robelto** y **Juan David Sánchez Vargas**.
+Desarrollado como proyecto de investigación aplicada en redes inalámbricas descentralizadas y computación en el borde por **Felipe Morales Robelto** **Kevin Soler Uribe** **Juan David Sánchez Vargas**.
